@@ -21,10 +21,15 @@ let mainWindow;
 function createWindow() {
   Menu.setApplicationMenu(null);
 
+  const data = readData();
+  const winBounds = data.windowBounds || {};
+
   mainWindow = new BrowserWindow({
-    width: 1080,
-    height: 608,
-    resizable: false,
+    width:  winBounds.width  || 1080,
+    height: winBounds.height || 608,
+    x:      winBounds.x,
+    y:      winBounds.y,
+    resizable: data.position === 1,
     titleBarStyle: 'hidden',
     titleBarOverlay: { height: 32, color: '#00000000', symbolColor: '#000000' },
     show: false,
@@ -38,15 +43,29 @@ function createWindow() {
     icon: path.join(__dirname, 'img', 'logo_white.png'),
   });
 
-  const { position } = readData();
-
-  if (position === 1) {
+  if (data.position === 1) {
     mainWindow.setResizable(true);
     mainWindow.setMinimumSize(800, 500);
     mainWindow.loadFile(path.join(__dirname, 'src', 'app', 'app.html'));
   } else {
     mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
   }
+
+  function saveBounds() {
+    const d = readData();
+    d.windowMaximized = mainWindow.isMaximized();
+    if (!mainWindow.isMaximized() && !mainWindow.isMinimized()) {
+      d.windowBounds = mainWindow.getBounds();
+    }
+    writeData(d);
+  }
+
+  mainWindow.on('resize',   saveBounds);
+  mainWindow.on('move',     saveBounds);
+  mainWindow.on('maximize', saveBounds);
+  mainWindow.on('unmaximize', saveBounds);
+
+  if (data.windowMaximized) mainWindow.maximize();
 
   mainWindow.webContents.session.clearCache();
   mainWindow.once('ready-to-show', () => mainWindow.show());
