@@ -83,6 +83,8 @@ function startEditPost(id, postEl, onDone) {
   textEl.replaceWith(textarea);
   textarea.after(actions);
 
+  postEl.classList.add('post--verified-tall');
+
   textarea.addEventListener('input', () => {
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
@@ -189,6 +191,10 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
       <button class="btn-like ${post.liked ? 'btn-like--active' : ''}" onclick="toggleLike(${post.id}, this)">
         <img class="btn-like__icon" src="../../img/${post.liked ? 'like.svg' : 'like_n.svg'}" alt="" />
         <span>${post.likes}</span>
+      </button>
+      <button class="btn-comments" onclick="openThread(${post.id})">
+        <img class="btn-comments__icon" src="../../img/comments.svg" alt="" />
+        ${getComments(post.id).length ? `<span class="btn-comments__count">${getComments(post.id).length}</span>` : ''}
       </button>
       <div class="post__time">
         ${post.editedAt ? `<img class="post__time-edit" src="../../img/edit.svg" alt="" />` : ''}

@@ -39,3 +39,29 @@ function saveProfile(profile) {
 function invalidateProfileCache() {
   _profileCache = null;
 }
+
+const COMMENTS_KEY = 'bouston_comments';
+
+function getComments(postId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
+    return all[postId] || [];
+  } catch { return []; }
+}
+
+function saveComment(postId, text) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
+    if (!all[postId]) all[postId] = [];
+    all[postId].push({ id: Date.now(), text, createdAt: Date.now() });
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function deleteComment(postId, commentId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
+    if (all[postId]) all[postId] = all[postId].filter(c => c.id !== commentId);
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}

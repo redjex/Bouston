@@ -189,8 +189,10 @@ document.getElementById('profile-btn-post').addEventListener('click', () => {
 });
 
 document.getElementById('profile-compose-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey))
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
     document.getElementById('profile-btn-post').click();
+  }
 });
 document.getElementById('profile-compose-input').addEventListener('input', function () {
   this.style.height = 'auto';

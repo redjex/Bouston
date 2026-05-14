@@ -127,6 +127,28 @@
 
   </div>
 
+  <!-- ══ Thread panel ══════════════════════════ -->
+  <div class="thread-overlay" id="thread-overlay" hidden>
+    <div class="thread-panel" id="thread-panel">
+      <div class="thread-panel__header">
+        <button class="thread-panel__back" id="thread-back">
+          <img src="../../img/close.svg" alt="close" />
+        </button>
+        <span class="thread-panel__title">Комментарии</span>
+      </div>
+      <div class="thread-panel__body" id="thread-body">
+        <div id="thread-post"></div>
+        <div class="thread-divider"></div>
+        <div id="thread-comments"></div>
+      </div>
+      <div class="thread-panel__compose">
+        <img class="avatar" id="thread-compose-avatar" src="../../img/logo_blue.png" alt="" />
+        <textarea class="compose__input thread-compose__input" id="thread-compose-input" rows="1" placeholder="Напишите ответ..."></textarea>
+        <button class="btn-post thread-compose__btn" id="thread-btn-post">↑</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ Shared ══════════════════════════════ -->
   <nav class="bottom-nav">
     <button class="nav-btn active" id="nav-home" title="Главная">
@@ -145,6 +167,7 @@
   <script src="js/posts.js"></script>
   <script src="js/feed.js"></script>
   <script src="js/profile.js"></script>
+  <script src="js/thread.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

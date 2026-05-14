@@ -61,8 +61,10 @@ document.getElementById('feed-btn-post').addEventListener('click', () => {
 });
 
 document.getElementById('feed-compose-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey))
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
     document.getElementById('feed-btn-post').click();
+  }
 });
 document.getElementById('feed-compose-input').addEventListener('input', function () {
   this.style.height = 'auto';
