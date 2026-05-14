@@ -28,16 +28,6 @@ function renderFeedPosts() {
   posts.forEach((post, i) => {
     const el = buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, false);
 
-    if (isHeartOnly(post.text)) {
-      const sourceEl = el.querySelector('.heart-source') || el.querySelector('.post__text');
-      const obs = new IntersectionObserver(entries => {
-        if (!entries[0].isIntersecting) return;
-        playHeartAnimation(sourceEl);
-        obs.disconnect();
-      }, { threshold: 0.6 });
-      obs.observe(el);
-    }
-
     container.appendChild(el);
   });
 

@@ -140,7 +140,6 @@ function pickImage(onLoad) {
   input.click();
 }
 
-document.getElementById('btn-edit-profile').addEventListener('click', openModal);
 document.getElementById('btn-banner-settings').addEventListener('click', openModal);
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 

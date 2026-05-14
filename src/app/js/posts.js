@@ -19,47 +19,6 @@ function isHeartOnly(text) {
   return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
 }
 
-/* ── Heart animation ────────────────────────
-   Preload once — new <img> element always
-   restarts a webp animation from frame 0    */
-const HEART_WEBP    = '../../img/heard_animation.webp';
-const HEART_ANIM_MS = 2000;
-
-const _heartPreload = new Image();
-_heartPreload.src = HEART_WEBP;
-
-const _stopHeartAnim = new Map();
-
-function playHeartAnimation(sourceEl) {
-  if (!sourceEl) return () => {};
-  const feedEl = document.getElementById('feed');
-  if (!feedEl) return () => {};
-
-  const GIF_DISPLAY = 150, GIF_NATIVE = 512, scale = GIF_DISPLAY / GIF_NATIVE;
-  const feedRect = feedEl.getBoundingClientRect();
-  const srcRect  = sourceEl.getBoundingClientRect();
-  const gifLeft  = srcRect.left - feedRect.left + srcRect.width  / 2 - 362 * scale;
-  const gifTop   = srcRect.top  - feedRect.top  + feedEl.scrollTop + srcRect.height / 2 - 190 * scale;
-
-  let stopped = false, img = null, timer = null;
-
-  img = document.createElement('img');
-  img.className  = 'heart-anim-inner';
-  img.style.left = gifLeft + 'px';
-  img.style.top  = gifTop  + 'px';
-  img.src        = HEART_WEBP;
-  feedEl.appendChild(img);
-
-  timer = setTimeout(() => {
-    if (img) { img.remove(); img = null; }
-  }, HEART_ANIM_MS);
-
-  return function stop() {
-    stopped = true;
-    clearTimeout(timer);
-    if (img) { img.remove(); img = null; }
-  };
-}
 
 /* ── Menu ───────────────────────────────────── */
 let _openMenuId        = null;
@@ -166,26 +125,43 @@ function toggleLike(id, btn) {
   post.likes += post.liked ? 1 : -1;
   savePosts(posts);
 
-  if (typeof _currentView !== 'undefined' && _currentView === 'feed') {
-    if (post.liked) {
-      const stop = playHeartAnimation(btn);
-      _stopHeartAnim.set(id, stop);
-    } else {
-      const stop = _stopHeartAnim.get(id);
-      if (stop) { stop(); _stopHeartAnim.delete(id); }
-    }
-    renderFeedPosts();
-  } else {
-    renderProfilePosts();
-  }
+  const icon = btn.querySelector('.btn-like__icon');
+  const counter = btn.querySelector('span');
+  if (icon) icon.src = `../../img/${post.liked ? 'like.svg' : 'like_n.svg'}`;
+  if (counter) counter.textContent = post.likes;
+  btn.classList.toggle('btn-like--active', post.liked);
 }
 
 /* ── Build post element ─────────────────────── */
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
-  const extra = isVerified ? ' post--verified' : (i === 0 ? ' post--featured' : '');
+  const newlineCount = (post.text.match(/\n/g) || []).length;
+  const isTall = isVerified && (newlineCount >= 2 || post.text.length > 150);
+  const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : (i === 0 ? ' post--featured' : '');
   const el = document.createElement('div');
   el.className = 'post' + extra;
+  const verifiedGradientSvg = isVerified ? `
+    <svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+          <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+          <feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/>
+        </filter>
+        <filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+          <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+          <feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/>
+        </filter>
+      </defs>
+      <g filter="url(#vbg-f0)">
+        <path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="#4E7ADF"/>
+      </g>
+      <g filter="url(#vbg-f1)">
+        <path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="#144CCC"/>
+      </g>
+    </svg>` : '';
   el.innerHTML = `
+    ${verifiedGradientSvg}
     ${showPin && post.pinned ? `<div class="post__pinned"><img class="post__pinned-icon" src="../../img/pin.svg" alt="" /><span>Закреплено</span></div>` : ''}
     <div class="post__header">
       <img class="avatar" src="${avatarSrc}" alt="" />
@@ -210,8 +186,8 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         : escapeHtml(post.text)
     }</p>
     <div class="post__footer">
-      <button class="btn-like" onclick="toggleLike(${post.id}, this)">
-        <span class="btn-like__icon">${post.liked ? '❤️' : '🤍'}</span>
+      <button class="btn-like ${post.liked ? 'btn-like--active' : ''}" onclick="toggleLike(${post.id}, this)">
+        <img class="btn-like__icon" src="../../img/${post.liked ? 'like.svg' : 'like_n.svg'}" alt="" />
         <span>${post.likes}</span>
       </button>
       <div class="post__time">

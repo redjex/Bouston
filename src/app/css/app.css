@@ -62,7 +62,7 @@ body {
 
 /* ── feed ── */
 .feed {
-  flex: 1; overflow-y: auto; padding: 86px 0 96px;
+  flex: 1; overflow-y: auto; padding: 29px 0 96px;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   scrollbar-width: none; position: relative;
 }
@@ -100,12 +100,23 @@ body {
   width: 440px; background: #111; border-radius: 22px; padding: 16px;
   display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden;
 }
-.post--verified::before, .post--featured::before {
+.post--verified { background: #111; }
+.post__verified-bg {
+  position: absolute; bottom: -29px; left: -24%;
+  width: 88%; height: auto;
+  pointer-events: none; z-index: 0;
+}
+.post--verified-tall .post__verified-bg {
+  top: 0; bottom: 0; left: -24%; width: 88%; height: 100%;
+  transform: scaleY(1.15) translateY(-4.5%);
+  transform-origin: top left;
+}
+.post--featured::before {
   content: ''; position: absolute; bottom: -80px; left: -80px; width: 420px; height: 260px;
   background: radial-gradient(ellipse at center, rgba(45,82,255,0.68) 0%, transparent 62%);
   pointer-events: none; z-index: 0;
 }
-.post--verified::after, .post--featured::after {
+.post--featured::after {
   content: ''; position: absolute; bottom: -70px; right: -70px; width: 260px; height: 180px;
   background: radial-gradient(ellipse at center, rgba(45,82,255,0.32) 0%, transparent 62%);
   pointer-events: none; z-index: 0;
@@ -171,7 +182,8 @@ body {
 }
 .btn-like:hover   { background: #242424; }
 .btn-like:disabled { opacity: 0.5; cursor: default; pointer-events: none; }
-.btn-like__icon   { font-size: 1.35rem; line-height: 1; }
+.btn-like__icon   { width: 14px; height: 14px; display: block; flex-shrink: 0; filter: invert(1); }
+.btn-like--active .btn-like__icon { filter: invert(27%) sepia(90%) saturate(700%) hue-rotate(330deg) brightness(110%); }
 .heart-source     { display: inline; }
 .heart-anim-inner {
   position: absolute; width: 150px; height: 150px;
@@ -194,7 +206,7 @@ body {
 /* ── profile ── */
 .profile-wrap {
   flex: 1; display: flex; flex-direction: column; align-items: center;
-  padding: 86px 0 96px; overflow-y: auto; gap: 12px; scrollbar-width: none;
+  padding: 29px 0 96px; overflow-y: auto; gap: 12px; scrollbar-width: none; position: relative;
 }
 .profile-wrap::-webkit-scrollbar { display: none; }
 #profile-posts-container {
