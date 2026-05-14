@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bouston</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Inter:wght@400;500;600;700&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=photo_camera" />
+
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <div class="titlebar">
+    <img class="titlebar__logo" src="../../img/logo_blue.png" alt="" />
+    <span class="titlebar__title">Bouston</span>
+  </div>
+
+  <!-- ══ VIEW: FEED ══════════════════════════ -->
+  <div id="view-feed" class="view view--active">
+    <div class="feed" id="feed">
+
+      <div class="compose">
+        <div class="compose__row">
+          <img class="avatar" id="feed-compose-avatar" src="../../img/logo_blue.png" alt="" />
+          <textarea class="compose__input" id="feed-compose-input" rows="1" placeholder="Напишите что нибудь..."></textarea>
+        </div>
+        <div class="compose__footer">
+          <button class="btn-post" id="feed-btn-post">Выставить</button>
+        </div>
+      </div>
+
+      <div id="posts-container"></div>
+    </div>
+  </div>
+
+  <!-- ══ VIEW: PROFILE ═══════════════════════ -->
+  <div id="view-profile" class="view">
+
+    <div class="profile-wrap" id="profile-wrap">
+
+      <div class="profile-card" id="profile-card">
+        <div class="profile-card__banner">
+          <img class="profile-card__banner-img" id="banner-img" src="" alt="" />
+          <div class="profile-card__banner-placeholder" id="banner-placeholder"></div>
+          <button class="btn-banner-settings" id="btn-banner-settings" title="Настройки профиля">
+            <img src="../../img/settings.svg" alt="settings" />
+          </button>
+        </div>
+        <div class="profile-card__avatar-section">
+          <div class="profile-card__avatar-wrap">
+            <img class="profile-card__avatar" id="profile-avatar" src="../../img/logo_blue.png" alt="" />
+          </div>
+        </div>
+        <div class="profile-card__body">
+          <div class="profile-card__info">
+            <div class="profile-card__namerow">
+              <span class="profile-card__name" id="profile-name">Bouston</span>
+              <img class="profile-card__verified" id="profile-verified-badge" src="../../img/verided.svg" alt="verified" style="display:none" />
+            </div>
+            <span class="profile-card__bio" id="profile-bio">Web &amp; UI/UX Designer</span>
+          </div>
+          <button class="btn-edit-profile" id="btn-edit-profile">
+            <img class="btn-edit-profile__icon" src="../../img/edit.svg" alt="edit" />
+            Редактировать
+          </button>
+        </div>
+      </div>
+
+      <div class="compose">
+        <div class="compose__row">
+          <img class="avatar" id="profile-compose-avatar" src="../../img/logo_blue.png" alt="" />
+          <textarea class="compose__input" id="profile-compose-input" rows="1" placeholder="Напишите что нибудь..."></textarea>
+        </div>
+        <div class="compose__footer">
+          <button class="btn-post" id="profile-btn-post">Выставить</button>
+        </div>
+      </div>
+
+      <div id="profile-posts-container"></div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="edit-modal" id="edit-modal" hidden>
+      <div class="edit-modal__box">
+        <div class="edit-modal__header">
+          <span class="edit-modal__title">Редактировать профиль</span>
+          <button class="btn-close-modal" id="btn-close-modal">
+            <img src="../../img/close.svg" alt="close" />
+          </button>
+        </div>
+        <div class="edit-modal__body">
+          <div class="edit-img-row">
+            <div class="edit-img-field edit-img-field--avatar">
+              <label>Аватар</label>
+              <button class="edit-img-btn" id="btn-pick-avatar">
+                <img id="modal-avatar-preview" src="" alt="" style="display:none" />
+                <div class="img-overlay"><span class="material-symbols-outlined">photo_camera</span></div>
+              </button>
+            </div>
+            <div class="edit-img-field" style="flex:1">
+              <label>Баннер</label>
+              <button class="edit-img-btn" id="btn-pick-banner" style="height:70px">
+                <img id="modal-banner-preview" src="" alt="" style="display:none" />
+                <div class="img-overlay"><span class="material-symbols-outlined">photo_camera</span></div>
+              </button>
+            </div>
+          </div>
+          <div class="edit-field">
+            <label>Имя</label>
+            <input id="input-name" type="text" placeholder="Ваше имя" />
+          </div>
+          <div class="edit-field">
+            <label>Описание</label>
+            <input id="input-bio" type="text" placeholder="Web &amp; UI/UX Designer" />
+          </div>
+          <div class="edit-field edit-field--toggle">
+            <label for="toggle-verified">Верификация</label>
+            <label class="toggle">
+              <input type="checkbox" id="toggle-verified" />
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+            </label>
+          </div>
+        </div>
+        <div class="edit-modal__footer">
+          <button class="btn-save" id="btn-save">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ Shared ══════════════════════════════ -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-home" title="Главная">
+      <img class="nav-icon" src="../../img/home.svg" alt="home" />
+    </button>
+    <button class="nav-btn" id="nav-profile" title="Профиль">
+      <img class="nav-icon" src="../../img/profile.svg" alt="profile" />
+    </button>
+  </nav>
+
+  <button class="btn-scroll-top" id="btn-scroll-top">
+    <img src="../../img/up.svg" alt="up" />
+  </button>
+
+  <script src="js/storage.js"></script>
+  <script src="js/posts.js"></script>
+  <script src="js/feed.js"></script>
+  <script src="js/profile.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

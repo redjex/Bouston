@@ -1,0 +1,49 @@
+:root,
+[data-theme="light"] {
+  --app-bg: #ffffff;
+  --text-primary:   #000000;
+  --text-secondary: #000000;
+  --input-bg:   #000000;
+  --input-text: #ffffff;
+  --btn-bg:   #000000;
+  --btn-text: #ffffff;
+  --theme-btn-bg:   #000000;
+  --theme-btn-text: #ffffff;
+  --progress-track: #000000;
+  --banner-text-color: #ffffff;
+}
+
+[data-theme="dark"] {
+  --app-bg: #141414;
+  --text-primary:   #ffffff;
+  --text-secondary: #ffffff;
+  --input-bg:   #ffffff;
+  --input-text: #141414;
+  --btn-bg:   #ffffff;
+  --btn-text: #141414;
+  --theme-btn-bg:   #ffffff;
+  --theme-btn-text: #141414;
+  --progress-track: #ffffff;
+  --banner-text-color: #141414;
+}
+
+:root {
+  --progress-gradient: linear-gradient(90deg, #144ccc 0%, #4e7adf 100%);
+}
+
+body,
+.app,
+.panel,
+.panel__title,
+.panel__badge,
+.field__label,
+.field__bg,
+.btn-next__bg,
+.btn-theme,
+.progress__track,
+.banner__text {
+  transition:
+    background-color 0.3s ease,
+    color            0.3s ease,
+    border-color     0.3s ease;
+}

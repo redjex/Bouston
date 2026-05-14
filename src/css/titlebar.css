@@ -1,0 +1,31 @@
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  -webkit-app-region: drag;
+  background: transparent;
+}
+
+.titlebar__logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  margin-right: 5px;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
+
+.titlebar__title {
+  font-family: 'Special Gothic Expanded One', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  user-select: none;
+  pointer-events: none;
+}

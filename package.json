@@ -1,0 +1,16 @@
+{
+  "name": "register-app",
+  "version": "1.0.0",
+  "description": "Registration window — Electron app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^42.0.1"
+  }
+}
