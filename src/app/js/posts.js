@@ -9,11 +9,32 @@ function escapeHtml(str) {
 function getHandle(name) { return '@' + name.toLowerCase().replace(/\s+/g, ''); }
 function formatPostTime(ts) {
   if (!ts) return '';
-  const d = new Date(ts), now = new Date();
+  const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
-  if (d.toDateString() === now.toDateString()) return `${hh}:${mm}`;
-  return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} ${hh}:${mm}`;
+  return `${hh}:${mm}`;
+}
+
+const MONTHS_RU = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+
+function getDateKey(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function formatDateLabel(ts) {
+  const d = new Date(ts), now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Сегодня';
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Вчера';
+  return `${d.getDate()} ${MONTHS_RU[d.getMonth()]}`;
+}
+
+function buildDateSeparator(ts) {
+  const el = document.createElement('div');
+  el.className = 'date-separator';
+  el.innerHTML = `<span>${formatDateLabel(ts)}</span>`;
+  return el;
 }
 function isHeartOnly(text) {
   return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
@@ -127,11 +148,13 @@ function toggleLike(id, btn) {
   post.likes += post.liked ? 1 : -1;
   savePosts(posts);
 
-  const icon = btn.querySelector('.btn-like__icon');
-  const counter = btn.querySelector('span');
-  if (icon) icon.src = `../../img/${post.liked ? 'like.svg' : 'like_n.svg'}`;
-  if (counter) counter.textContent = post.likes;
-  btn.classList.toggle('btn-like--active', post.liked);
+  document.querySelectorAll(`.btn-like[onclick="toggleLike(${id}, this)"]`).forEach(b => {
+    const icon = b.querySelector('.btn-like__icon');
+    const counter = b.querySelector('span');
+    if (icon) icon.src = `../../img/${post.liked ? 'like.svg' : 'like_n.svg'}`;
+    if (counter) counter.textContent = post.likes;
+    b.classList.toggle('btn-like--active', post.liked);
+  });
 }
 
 /* ── Build post element ─────────────────────── */

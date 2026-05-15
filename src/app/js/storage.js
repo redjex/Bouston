@@ -53,9 +53,21 @@ function saveComment(postId, text) {
   try {
     const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
     if (!all[postId]) all[postId] = [];
-    all[postId].push({ id: Date.now(), text, createdAt: Date.now() });
+    all[postId].push({ id: Date.now(), text, createdAt: Date.now(), likes: 0, liked: false });
     localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
   } catch {}
+}
+
+function toggleCommentLike(postId, commentId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
+    const comment = (all[postId] || []).find(c => c.id === commentId);
+    if (!comment) return null;
+    comment.liked  = !comment.liked;
+    comment.likes += comment.liked ? 1 : -1;
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
+    return comment;
+  } catch { return null; }
 }
 
 function deleteComment(postId, commentId) {

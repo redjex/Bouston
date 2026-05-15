@@ -25,9 +25,15 @@ function renderFeedPosts() {
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
     : '';
 
+  let lastDateKey = null;
   posts.forEach((post, i) => {
+    const ts = post.createdAt || post.id;
+    const dateKey = getDateKey(ts);
+    if (dateKey !== lastDateKey) {
+      container.appendChild(buildDateSeparator(ts));
+      lastDateKey = dateKey;
+    }
     const el = buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, false);
-
     container.appendChild(el);
   });
 

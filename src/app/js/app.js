@@ -10,12 +10,13 @@ function showView(name) {
   document.getElementById('view-profile').classList.toggle('view--active', name === 'profile');
   document.getElementById('nav-home').classList.toggle('active', name === 'feed');
   document.getElementById('nav-profile').classList.toggle('active', name === 'profile');
-  _scrollTopBtn.classList.remove('visible');
   if (name === 'feed') {
     renderFeedPosts();
+    _scrollTopBtn.classList.toggle('visible', _feedEl.scrollTop > 300);
   } else {
     renderProfile();
     renderProfilePosts();
+    _scrollTopBtn.classList.toggle('visible', _profileWrap.scrollTop > 300);
   }
 }
 

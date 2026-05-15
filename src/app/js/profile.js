@@ -72,7 +72,14 @@ function renderProfilePosts() {
     return 0;
   });
 
+  let lastDateKey = null;
   sorted.forEach((post, i) => {
+    const ts = post.createdAt || post.id;
+    const dateKey = getDateKey(ts);
+    if (dateKey !== lastDateKey) {
+      container.appendChild(buildDateSeparator(ts));
+      lastDateKey = dateKey;
+    }
     const el = buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, true);
     container.appendChild(el);
   });
@@ -142,6 +149,15 @@ function pickImage(onLoad) {
 
 document.getElementById('btn-banner-settings').addEventListener('click', openModal);
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+
+document.getElementById('input-name').addEventListener('input', function () {
+  const pos = this.selectionStart;
+  const cleaned = this.value.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (this.value !== cleaned) {
+    this.value = cleaned;
+    this.setSelectionRange(pos - 1, pos - 1);
+  }
+});
 
 document.getElementById('btn-pick-avatar').addEventListener('click', () => {
   pickImage(dataUrl => {
