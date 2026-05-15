@@ -157,131 +157,176 @@ function getTotalReactions(post) {
   return Object.values(post.reactions || {}).reduce((s, v) => s + v, 0);
 }
 
-function toggleLike(id, btn) {
-  const posts = getPosts();
-  const post  = posts.find(p => p.id === id);
-  if (!post) return;
-
+function migrateReactions(post) {
   if (!post.reactions) post.reactions = {};
-  if (post.myReaction === undefined) post.myReaction = null;
-
-  const EMOJI = '❤️';
-  if (post.myReaction) {
-    post.reactions[post.myReaction] = Math.max(0, (post.reactions[post.myReaction] || 0) - 1);
-    if (!post.reactions[post.myReaction]) delete post.reactions[post.myReaction];
-    post.myReaction = null;
-    post.liked = false;
-  } else {
-    post.reactions[EMOJI] = (post.reactions[EMOJI] || 0) + 1;
-    post.myReaction = EMOJI;
-    post.liked = true;
+  if (!Array.isArray(post.myReactions)) {
+    post.myReactions = post.myReaction ? [post.myReaction] : [];
+    delete post.myReaction;
   }
-  post.likes = getTotalReactions(post);
-  savePosts(posts);
+}
 
-  const dominant = getDominantEmoji(post);
-  document.querySelectorAll(`.btn-like[data-id="${id}"]`).forEach(b => {
-    const icon = b.querySelector('.btn-like__icon');
-    const counter = b.querySelector('span');
-    if (icon) {
-      if (dominant) {
-        icon.replaceWith(Object.assign(document.createElement('span'), { className: 'btn-like__icon btn-like__icon--emoji', textContent: dominant }));
-      } else {
-        const isImg = icon.tagName === 'IMG';
-        if (isImg) icon.src = `../../img/${post.liked ? 'like.svg' : 'like_n.svg'}`;
-        else icon.replaceWith(Object.assign(document.createElement('img'), { className: 'btn-like__icon', src: `../../img/like_n.svg`, alt: '' }));
-      }
+function removeReaction(post, emoji) {
+  post.reactions[emoji] = Math.max(0, (post.reactions[emoji] || 0) - 1);
+  if (!post.reactions[emoji]) delete post.reactions[emoji];
+  post.myReactions = post.myReactions.filter(e => e !== emoji);
+}
+
+function addReaction(post, emoji) {
+  post.reactions[emoji] = (post.reactions[emoji] || 0) + 1;
+  post.myReactions.push(emoji);
+}
+
+let _emojiFileMap = null;
+async function getEmojiFileMap() {
+  if (_emojiFileMap) return _emojiFileMap;
+  const entries = await loadEmojiList();
+  _emojiFileMap = Object.fromEntries(entries.map(({ file, emoji }) => [emoji, file]));
+  return _emojiFileMap;
+}
+
+function buildReactionBtn(emoji, count, active, id) {
+  const btn = document.createElement('button');
+  btn.className = 'btn-like' + (active ? ' btn-like--active' : '');
+  btn.dataset.id = id;
+  btn.dataset.emoji = emoji;
+
+  const iconWrap = document.createElement('span');
+  iconWrap.className = 'btn-like__icon btn-like__icon--emoji';
+
+  getEmojiFileMap().then(map => {
+    const file = map[emoji];
+    if (file) {
+      const player = createTgsPlayer(file, 20, true);
+      iconWrap.appendChild(player);
+    } else {
+      iconWrap.textContent = emoji;
     }
-    if (counter) counter.textContent = post.likes;
-    b.classList.toggle('btn-like--active', post.liked);
+  });
+
+  const counter = document.createElement('span');
+  counter.textContent = count;
+
+  btn.appendChild(iconWrap);
+  btn.appendChild(counter);
+  return btn;
+}
+
+function buildReactionsEl(post) {
+  migrateReactions(post);
+  const id = post.id;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'post__reactions';
+  wrapper.dataset.postId = id;
+
+  const others = Object.keys(post.reactions)
+    .filter(e => e !== '❤️' && (post.reactions[e] || 0) > 0)
+    .sort((a, b) => (post.reactions[b] || 0) - (post.reactions[a] || 0));
+
+  ['❤️', ...others].forEach(emoji => {
+    const count = post.reactions[emoji] || 0;
+    const active = post.myReactions.includes(emoji);
+
+    const btn = buildReactionBtn(emoji, count, active, id);
+
+    btn.addEventListener('click', () => toggleReaction(id, emoji));
+    btn.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const sc = btn.closest('.feed') || btn.closest('.profile-wrap') || document.body;
+      openEmojiMenu(id, btn, sc);
+    });
+
+    wrapper.appendChild(btn);
+  });
+
+  return wrapper;
+}
+
+function syncReactions(id, post) {
+  document.querySelectorAll(`.post__reactions[data-post-id="${id}"]`).forEach(w => {
+    w.replaceWith(buildReactionsEl(post));
   });
 }
 
+function reactionLimit() {
+  return getProfile().verified ? 3 : 1;
+}
+
+function toggleReaction(id, emoji) {
+  const posts = getPosts();
+  const post  = posts.find(p => p.id === id);
+  if (!post) return;
+  migrateReactions(post);
+
+  if (post.myReactions.includes(emoji)) {
+    removeReaction(post, emoji);
+  } else {
+    const activeTypes = new Set(['❤️', ...Object.keys(post.reactions).filter(e => post.reactions[e] > 0)]);
+    if (!activeTypes.has(emoji) && activeTypes.size >= 3) return;
+    if (post.myReactions.length >= reactionLimit()) {
+      removeReaction(post, post.myReactions[0]);
+    }
+    addReaction(post, emoji);
+  }
+
+  post.liked = post.myReactions.length > 0;
+  post.likes = getTotalReactions(post);
+  savePosts(posts);
+  syncReactions(id, post);
+}
+
 /* ── Emoji picker ───────────────────────────── */
-const EMOJI_LIST = ['❤️','😂','🔥','😮','😢','👍','💀','🎉'];
 let _emojiMenuCleanup = null;
 
 function closeEmojiMenu() {
-  document.querySelectorAll('.post__emoji-menu').forEach(m => m.remove());
+  document.querySelectorAll('.post__emoji-menu').forEach(m => {
+    m.querySelectorAll('[data-tgs]').forEach(el => el.destroy?.());
+    m.remove();
+  });
   if (_emojiMenuCleanup) { _emojiMenuCleanup(); _emojiMenuCleanup = null; }
 }
 
-const EMOJI_ITEM_H  = 43;
-const EMOJI_ITEM_GAP = 3;
-const EMOJI_PADDING  = 6;
-const EMOJI_VISIBLE  = 3;
-const EMOJI_MENU_H   = EMOJI_VISIBLE * EMOJI_ITEM_H + (EMOJI_VISIBLE - 1) * EMOJI_ITEM_GAP + EMOJI_PADDING * 2;
+const GRID_COLS    = 5;
+const GRID_ITEM_SZ = 52;
+const GRID_GAP     = 4;
+const GRID_ROWS    = 4;
+const GRID_PAD     = 8;
+const MENU_W = GRID_COLS * GRID_ITEM_SZ + (GRID_COLS - 1) * GRID_GAP + GRID_PAD * 2;
+const MENU_H = GRID_ROWS * GRID_ITEM_SZ + (GRID_ROWS - 1) * GRID_GAP + GRID_PAD * 2;
 
-function openEmojiMenu(id, likeBtn, scrollContainer) {
+async function openEmojiMenu(id, likeBtn, scrollContainer) {
   closeEmojiMenu();
   const posts = getPosts();
   const post  = posts.find(p => p.id === id);
   if (!post) return;
-  if (!post.reactions) post.reactions = {};
-  if (post.myReaction === undefined) post.myReaction = null;
+  migrateReactions(post);
+
+  const entries = await loadEmojiList();
 
   const menu = document.createElement('div');
   menu.className = 'post__emoji-menu';
-  menu.style.height = EMOJI_MENU_H + 'px';
 
   const postEl = likeBtn.closest('.post');
 
   function updatePos() {
     const r = (postEl || likeBtn).getBoundingClientRect();
-    menu.style.left = (r.left - EMOJI_ITEM_H - EMOJI_PADDING * 2 - 8) + 'px';
+    menu.style.left = (r.left - MENU_W - 8) + 'px';
     menu.style.top  = r.top + 'px';
   }
 
-  EMOJI_LIST.forEach(emoji => {
+  entries.forEach(({ file, emoji }) => {
     const btn = document.createElement('button');
-    btn.className = 'post__emoji-item' + (post.myReaction === emoji ? ' post__emoji-item--active' : '');
-    btn.textContent = emoji;
+    btn.className = 'post__emoji-item' + (post.myReactions.includes(emoji) ? ' post__emoji-item--active' : '');
+    btn.dataset.emoji = emoji;
+
+    const player = createTgsPlayer(file, GRID_ITEM_SZ - 8);
+    player.dataset.tgs = '1';
+    btn.appendChild(player);
+
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      const ps = getPosts();
-      const p  = ps.find(p => p.id === id);
-      if (!p) return;
-      if (!p.reactions) p.reactions = {};
-
-      if (p.myReaction === emoji) {
-        p.reactions[emoji] = Math.max(0, (p.reactions[emoji] || 0) - 1);
-        if (!p.reactions[emoji]) delete p.reactions[emoji];
-        p.myReaction = null;
-        p.liked = false;
-      } else {
-        if (p.myReaction) {
-          p.reactions[p.myReaction] = Math.max(0, (p.reactions[p.myReaction] || 0) - 1);
-          if (!p.reactions[p.myReaction]) delete p.reactions[p.myReaction];
-        }
-        p.reactions[emoji] = (p.reactions[emoji] || 0) + 1;
-        p.myReaction = emoji;
-        p.liked = true;
-      }
-      p.likes = getTotalReactions(p);
-      savePosts(ps);
-
-      const dominant = getDominantEmoji(p);
-      document.querySelectorAll(`.btn-like[data-id="${id}"]`).forEach(b => {
-        const iconEl = b.querySelector('.btn-like__icon');
-        const counter = b.querySelector('span');
-        if (iconEl) {
-          if (dominant) {
-            const span = document.createElement('span');
-            span.className = 'btn-like__icon btn-like__icon--emoji';
-            span.textContent = dominant;
-            iconEl.replaceWith(span);
-          } else {
-            const img = document.createElement('img');
-            img.className = 'btn-like__icon';
-            img.src = '../../img/like_n.svg';
-            img.alt = '';
-            iconEl.replaceWith(img);
-          }
-        }
-        if (counter) counter.textContent = p.likes;
-        b.classList.toggle('btn-like--active', p.liked);
-      });
-
+      toggleReaction(id, emoji);
       closeEmojiMenu();
     });
     menu.appendChild(btn);
@@ -353,12 +398,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         : escapeHtml(post.text)
     }</p>
     <div class="post__footer">
-      <button class="btn-like ${post.liked ? 'btn-like--active' : ''}" data-id="${post.id}" onclick="toggleLike(${post.id}, this)">
-        ${getDominantEmoji(post)
-          ? `<span class="btn-like__icon btn-like__icon--emoji">${getDominantEmoji(post)}</span>`
-          : `<img class="btn-like__icon" src="../../img/${post.liked ? 'like.svg' : 'like_n.svg'}" alt="" />`}
-        <span>${post.likes}</span>
-      </button>
+      <div class="post__reactions" data-post-id="${post.id}"></div>
       <button class="btn-comments" onclick="openThread(${post.id})">
         <img class="btn-comments__icon" src="../../img/comments.svg" alt="" />
         ${getComments(post.id).length ? `<span class="btn-comments__count">${getComments(post.id).length}</span>` : ''}
@@ -369,6 +409,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
       </div>
     </div>
   `;
+  el.querySelector('.post__reactions').replaceWith(buildReactionsEl(post));
   return el;
 }
 

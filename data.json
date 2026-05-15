@@ -1,10 +1,10 @@
 {
   "position": 1,
+  "windowMaximized": true,
   "windowBounds": {
-    "x": 261,
-    "y": -18,
-    "width": 1157,
-    "height": 760
-  },
-  "windowMaximized": true
+    "x": 425,
+    "y": -15,
+    "width": 1080,
+    "height": 608
+  }
 }

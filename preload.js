@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close:        () => ipcRenderer.send('win:close'),
   setTheme:     (theme) => ipcRenderer.send('win:set-theme', theme),
   authComplete: () => ipcRenderer.send('auth:complete'),
+  listEmoji:    () => ipcRenderer.invoke('emoji:list'),
 });

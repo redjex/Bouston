@@ -129,17 +129,19 @@
 
   <!-- ══ Thread panel ══════════════════════════ -->
   <div class="thread-overlay" id="thread-overlay" hidden>
-    <div class="thread-panel" id="thread-panel">
-      <div class="thread-panel__header">
+    <div class="thread-wrap">
+      <div class="thread-header">
         <button class="thread-panel__back" id="thread-back">
           <img src="../../img/close.svg" alt="close" />
         </button>
         <span class="thread-panel__title">Комментарии</span>
       </div>
-      <div class="thread-panel__body" id="thread-body">
-        <div id="thread-post"></div>
-        <div class="thread-divider"></div>
-        <div id="thread-comments"></div>
+      <div class="thread-panel" id="thread-panel">
+        <div class="thread-panel__body" id="thread-body">
+          <div id="thread-post"></div>
+          <div class="thread-divider"></div>
+          <div id="thread-comments"></div>
+        </div>
       </div>
       <div class="thread-panel__compose">
         <img class="avatar" id="thread-compose-avatar" src="../../img/logo_blue.png" alt="" />
@@ -163,6 +165,9 @@
     <img src="../../img/up.svg" alt="up" />
   </button>
 
+  <script src="../../node_modules/pako/dist/pako.min.js"></script>
+  <script src="../../node_modules/lottie-web/build/player/lottie.min.js"></script>
+  <script src="js/tgs.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/posts.js"></script>
   <script src="js/feed.js"></script>

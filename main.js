@@ -72,6 +72,14 @@ function createWindow() {
   setTimeout(() => { if (!mainWindow.isVisible()) mainWindow.show(); }, 2000);
 }
 
+const EMOJI_DIR = path.join(__dirname, 'img', 'emoji');
+ipcMain.handle('emoji:list', () =>
+  fs.readdirSync(EMOJI_DIR)
+    .filter(f => f.endsWith('.tgs'))
+    .sort()
+    .map(f => ({ file: f, emoji: f.replace(/^\d+_/, '').replace(/\.tgs$/, '') }))
+);
+
 ipcMain.on('win:minimize', () => mainWindow?.minimize());
 ipcMain.on('win:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
 ipcMain.on('win:close',    () => mainWindow?.close());
