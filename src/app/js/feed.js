@@ -37,6 +37,15 @@ function renderFeedPosts() {
     container.appendChild(el);
   });
 
+  container.querySelectorAll('.btn-like[data-id]').forEach(btn => {
+    const id = Number(btn.dataset.id);
+    btn.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openEmojiMenu(id, btn, _feedEl);
+    });
+  });
+
   container.querySelectorAll('.post__more-wrap').forEach(wrap => {
     const btn    = wrap.querySelector('.post__more');
     const id     = Number(btn.dataset.id);

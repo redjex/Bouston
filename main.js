@@ -42,7 +42,7 @@ function createWindow() {
     },
     icon: path.join(__dirname, 'img', 'logo_white.png'),
   });
-
+  mainWindow.webContents.openDevTools();
   if (data.position === 1) {
     mainWindow.setResizable(true);
     mainWindow.setMinimumSize(800, 500);

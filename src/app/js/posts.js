@@ -65,7 +65,11 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   }
   updatePos();
   scrollContainer.addEventListener('scroll', updatePos);
-  _menuScrollCleanup = () => scrollContainer.removeEventListener('scroll', updatePos);
+  window.addEventListener('resize', updatePos);
+  _menuScrollCleanup = () => {
+    scrollContainer.removeEventListener('scroll', updatePos);
+    window.removeEventListener('resize', updatePos);
+  };
 
   menuItems.forEach(({ src, action }) => {
     const btn = document.createElement('button');
@@ -140,28 +144,166 @@ function pinPost(id, onDone) {
   onDone();
 }
 
+function getDominantEmoji(post) {
+  const r = post.reactions || {};
+  let top = null, max = 0;
+  for (const [emoji, cnt] of Object.entries(r)) {
+    if (cnt > max) { max = cnt; top = emoji; }
+  }
+  return top;
+}
+
+function getTotalReactions(post) {
+  return Object.values(post.reactions || {}).reduce((s, v) => s + v, 0);
+}
+
 function toggleLike(id, btn) {
   const posts = getPosts();
   const post  = posts.find(p => p.id === id);
   if (!post) return;
-  post.liked  = !post.liked;
-  post.likes += post.liked ? 1 : -1;
+
+  if (!post.reactions) post.reactions = {};
+  if (post.myReaction === undefined) post.myReaction = null;
+
+  const EMOJI = '❤️';
+  if (post.myReaction) {
+    post.reactions[post.myReaction] = Math.max(0, (post.reactions[post.myReaction] || 0) - 1);
+    if (!post.reactions[post.myReaction]) delete post.reactions[post.myReaction];
+    post.myReaction = null;
+    post.liked = false;
+  } else {
+    post.reactions[EMOJI] = (post.reactions[EMOJI] || 0) + 1;
+    post.myReaction = EMOJI;
+    post.liked = true;
+  }
+  post.likes = getTotalReactions(post);
   savePosts(posts);
 
-  document.querySelectorAll(`.btn-like[onclick="toggleLike(${id}, this)"]`).forEach(b => {
+  const dominant = getDominantEmoji(post);
+  document.querySelectorAll(`.btn-like[data-id="${id}"]`).forEach(b => {
     const icon = b.querySelector('.btn-like__icon');
     const counter = b.querySelector('span');
-    if (icon) icon.src = `../../img/${post.liked ? 'like.svg' : 'like_n.svg'}`;
+    if (icon) {
+      if (dominant) {
+        icon.replaceWith(Object.assign(document.createElement('span'), { className: 'btn-like__icon btn-like__icon--emoji', textContent: dominant }));
+      } else {
+        const isImg = icon.tagName === 'IMG';
+        if (isImg) icon.src = `../../img/${post.liked ? 'like.svg' : 'like_n.svg'}`;
+        else icon.replaceWith(Object.assign(document.createElement('img'), { className: 'btn-like__icon', src: `../../img/like_n.svg`, alt: '' }));
+      }
+    }
     if (counter) counter.textContent = post.likes;
     b.classList.toggle('btn-like--active', post.liked);
   });
+}
+
+/* ── Emoji picker ───────────────────────────── */
+const EMOJI_LIST = ['❤️','😂','🔥','😮','😢','👍','💀','🎉'];
+let _emojiMenuCleanup = null;
+
+function closeEmojiMenu() {
+  document.querySelectorAll('.post__emoji-menu').forEach(m => m.remove());
+  if (_emojiMenuCleanup) { _emojiMenuCleanup(); _emojiMenuCleanup = null; }
+}
+
+const EMOJI_ITEM_H  = 43;
+const EMOJI_ITEM_GAP = 3;
+const EMOJI_PADDING  = 6;
+const EMOJI_VISIBLE  = 3;
+const EMOJI_MENU_H   = EMOJI_VISIBLE * EMOJI_ITEM_H + (EMOJI_VISIBLE - 1) * EMOJI_ITEM_GAP + EMOJI_PADDING * 2;
+
+function openEmojiMenu(id, likeBtn, scrollContainer) {
+  closeEmojiMenu();
+  const posts = getPosts();
+  const post  = posts.find(p => p.id === id);
+  if (!post) return;
+  if (!post.reactions) post.reactions = {};
+  if (post.myReaction === undefined) post.myReaction = null;
+
+  const menu = document.createElement('div');
+  menu.className = 'post__emoji-menu';
+  menu.style.height = EMOJI_MENU_H + 'px';
+
+  const postEl = likeBtn.closest('.post');
+
+  function updatePos() {
+    const r = (postEl || likeBtn).getBoundingClientRect();
+    menu.style.left = (r.left - EMOJI_ITEM_H - EMOJI_PADDING * 2 - 8) + 'px';
+    menu.style.top  = r.top + 'px';
+  }
+
+  EMOJI_LIST.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.className = 'post__emoji-item' + (post.myReaction === emoji ? ' post__emoji-item--active' : '');
+    btn.textContent = emoji;
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const ps = getPosts();
+      const p  = ps.find(p => p.id === id);
+      if (!p) return;
+      if (!p.reactions) p.reactions = {};
+
+      if (p.myReaction === emoji) {
+        p.reactions[emoji] = Math.max(0, (p.reactions[emoji] || 0) - 1);
+        if (!p.reactions[emoji]) delete p.reactions[emoji];
+        p.myReaction = null;
+        p.liked = false;
+      } else {
+        if (p.myReaction) {
+          p.reactions[p.myReaction] = Math.max(0, (p.reactions[p.myReaction] || 0) - 1);
+          if (!p.reactions[p.myReaction]) delete p.reactions[p.myReaction];
+        }
+        p.reactions[emoji] = (p.reactions[emoji] || 0) + 1;
+        p.myReaction = emoji;
+        p.liked = true;
+      }
+      p.likes = getTotalReactions(p);
+      savePosts(ps);
+
+      const dominant = getDominantEmoji(p);
+      document.querySelectorAll(`.btn-like[data-id="${id}"]`).forEach(b => {
+        const iconEl = b.querySelector('.btn-like__icon');
+        const counter = b.querySelector('span');
+        if (iconEl) {
+          if (dominant) {
+            const span = document.createElement('span');
+            span.className = 'btn-like__icon btn-like__icon--emoji';
+            span.textContent = dominant;
+            iconEl.replaceWith(span);
+          } else {
+            const img = document.createElement('img');
+            img.className = 'btn-like__icon';
+            img.src = '../../img/like_n.svg';
+            img.alt = '';
+            iconEl.replaceWith(img);
+          }
+        }
+        if (counter) counter.textContent = p.likes;
+        b.classList.toggle('btn-like--active', p.liked);
+      });
+
+      closeEmojiMenu();
+    });
+    menu.appendChild(btn);
+  });
+
+  document.body.appendChild(menu);
+  updatePos();
+  scrollContainer.addEventListener('scroll', updatePos);
+  window.addEventListener('resize', updatePos);
+  _emojiMenuCleanup = () => {
+    scrollContainer.removeEventListener('scroll', updatePos);
+    window.removeEventListener('resize', updatePos);
+  };
+
+  setTimeout(() => document.addEventListener('click', closeEmojiMenu, { once: true }), 0);
 }
 
 /* ── Build post element ─────────────────────── */
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
   const newlineCount = (post.text.match(/\n/g) || []).length;
   const isTall = isVerified && (newlineCount >= 2 || post.text.length > 150);
-  const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : (i === 0 ? ' post--featured' : '');
+  const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : '';
   const el = document.createElement('div');
   el.className = 'post' + extra;
   const verifiedGradientSvg = isVerified ? `
@@ -211,8 +353,10 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         : escapeHtml(post.text)
     }</p>
     <div class="post__footer">
-      <button class="btn-like ${post.liked ? 'btn-like--active' : ''}" onclick="toggleLike(${post.id}, this)">
-        <img class="btn-like__icon" src="../../img/${post.liked ? 'like.svg' : 'like_n.svg'}" alt="" />
+      <button class="btn-like ${post.liked ? 'btn-like--active' : ''}" data-id="${post.id}" onclick="toggleLike(${post.id}, this)">
+        ${getDominantEmoji(post)
+          ? `<span class="btn-like__icon btn-like__icon--emoji">${getDominantEmoji(post)}</span>`
+          : `<img class="btn-like__icon" src="../../img/${post.liked ? 'like.svg' : 'like_n.svg'}" alt="" />`}
         <span>${post.likes}</span>
       </button>
       <button class="btn-comments" onclick="openThread(${post.id})">
@@ -226,4 +370,53 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     </div>
   `;
   return el;
+}
+
+const _verifiedBgSvg = `<svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/>
+    </filter>
+    <filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/>
+    </filter>
+  </defs>
+  <g filter="url(#vbg-f0)">
+    <path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="#4E7ADF"/>
+  </g>
+  <g filter="url(#vbg-f1)">
+    <path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="#144CCC"/>
+  </g>
+</svg>`;
+
+function refreshPostsVerifiedState(isVerified) {
+  const badgeSrc = '../../img/verided.svg';
+  document.querySelectorAll('.post').forEach(postEl => {
+    const textEl = postEl.querySelector('.post__text');
+    const text = textEl ? textEl.textContent : '';
+    const newlineCount = (text.match(/\n/g) || []).length;
+    const isTall = isVerified && (newlineCount >= 2 || text.length > 150);
+
+    postEl.classList.toggle('post--verified', isVerified);
+    postEl.classList.toggle('post--verified-tall', isVerified && isTall);
+
+    const existingBg = postEl.querySelector('.post__verified-bg');
+    if (isVerified && !existingBg) {
+      postEl.insertAdjacentHTML('afterbegin', _verifiedBgSvg);
+    } else if (!isVerified && existingBg) {
+      existingBg.remove();
+    }
+
+    const badge = postEl.querySelector('.post__verified-badge');
+    if (isVerified && !badge) {
+      const namerow = postEl.querySelector('.post__namerow');
+      if (namerow) namerow.insertAdjacentHTML('beforeend', `<img class="post__verified-badge" src="${badgeSrc}" alt="verified" />`);
+    } else if (!isVerified && badge) {
+      badge.remove();
+    }
+  });
 }
