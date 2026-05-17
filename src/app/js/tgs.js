@@ -21,7 +21,7 @@ async function fetchTgsData(file) {
   return json;
 }
 
-function createTgsPlayer(file, size = 40, autoplay = false) {
+function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
   const container = document.createElement('div');
   container.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;overflow:visible;`;
 
@@ -35,7 +35,7 @@ function createTgsPlayer(file, size = 40, autoplay = false) {
         container,
         animationData: JSON.parse(JSON.stringify(json)),
         renderer:  'svg',
-        loop:      true,
+        loop,
         autoplay,
         rendererSettings: {
           progressiveLoad: true,
@@ -43,6 +43,11 @@ function createTgsPlayer(file, size = 40, autoplay = false) {
         },
       });
       if (!autoplay) animation.goToAndStop(0, true);
+      if (!loop) {
+        animation.addEventListener('complete', () => {
+          animation?.goToAndStop(animation.totalFrames - 1, true);
+        });
+      }
     }).catch(() => {});
   }
 
@@ -50,11 +55,11 @@ function createTgsPlayer(file, size = 40, autoplay = false) {
     if (!animation) return;
     animation.destroy();
     animation = null;
-    const canvas = container.querySelector('canvas');
-    if (canvas) canvas.remove();
+    container.innerHTML = '';
   }
 
-  if (!autoplay) {
+  // hover — только для picker (не autoplay, loop)
+  if (!autoplay && loop) {
     container.addEventListener('mouseenter', () => animation?.goToAndPlay(0, true));
     container.addEventListener('mouseleave', () => {
       animation?.stop();

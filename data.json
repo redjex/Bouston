@@ -1,9 +1,9 @@
 {
   "position": 1,
-  "windowMaximized": false,
+  "windowMaximized": true,
   "windowBounds": {
-    "x": 425,
-    "y": -15,
+    "x": 420,
+    "y": -17,
     "width": 1080,
     "height": 608
   }
