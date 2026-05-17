@@ -47,7 +47,7 @@ function syncModalPreview(imgId, btnId, src, alwaysShow) {
 }
 
 /* ── Render profile posts ───────────────────── */
-const PROFILE_PAGE = 10;
+const PROFILE_PAGE = 5;
 let _profileObserver = null;
 
 function attachProfileMenu(container) {

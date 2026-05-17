@@ -21,6 +21,18 @@ async function fetchTgsData(file) {
   return json;
 }
 
+/* ── Shared IntersectionObserver для всех TGS-контейнеров ── */
+const _tgsObserverMap = new Map(); // container → { mount, unmount }
+
+const _tgsSharedObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    const cb = _tgsObserverMap.get(entry.target);
+    if (!cb) return;
+    if (entry.isIntersecting) cb.mount();
+    else cb.unmount();
+  });
+}, { threshold: 0.1 });
+
 function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
   const container = document.createElement('div');
   container.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;overflow:visible;`;
@@ -33,7 +45,7 @@ function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
       if (!container.isConnected) return;
       animation = lottie.loadAnimation({
         container,
-        animationData: JSON.parse(JSON.stringify(json)),
+        animationData: structuredClone(json),
         renderer:  'svg',
         loop,
         autoplay,
@@ -58,7 +70,6 @@ function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
     container.innerHTML = '';
   }
 
-  // hover — только для picker (не autoplay, loop)
   if (!autoplay && loop) {
     container.addEventListener('mouseenter', () => animation?.goToAndPlay(0, true));
     container.addEventListener('mouseleave', () => {
@@ -67,12 +78,13 @@ function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
     });
   }
 
-  const observer = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting) mount();
-    else unmount();
-  }, { threshold: 0.1 });
+  _tgsObserverMap.set(container, { mount, unmount });
+  _tgsSharedObserver.observe(container);
 
-  observer.observe(container);
-  container.destroy = () => { unmount(); observer.disconnect(); };
+  container.destroy = () => {
+    unmount();
+    _tgsSharedObserver.unobserve(container);
+    _tgsObserverMap.delete(container);
+  };
   return container;
 }

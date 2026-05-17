@@ -7,7 +7,7 @@ function renderFeedComposeAvatar() {
   if (el) el.src = getProfile().avatar || '../../img/logo_blue.png';
 }
 
-const FEED_PAGE = 10;
+const FEED_PAGE = 5;
 let _feedObserver = null;
 
 function attachFeedMenu(container) {

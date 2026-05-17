@@ -2,39 +2,177 @@
 
 /* ── Lightbox ───────────────────────────────── */
 (function () {
-  const lb    = document.getElementById('lightbox');
-  const lbImg = document.getElementById('lightbox-img');
+  const lb             = document.getElementById('lightbox');
+  const lbImg          = document.getElementById('lightbox-img');
+  const lbVideo        = document.getElementById('lightbox-video');
+  const lbToolbarPhoto = document.getElementById('lb-toolbar-photo');
+  const lbToolbarVideo = document.getElementById('lb-toolbar-video');
+
+  // wire up lightbox video player controls
+  (function () {
+    const playBtn = document.getElementById('lb-play-btn');
+    const muteBtn = document.getElementById('lb-mute-btn');
+    const progress = document.getElementById('lb-progress');
+    const bar      = document.getElementById('lb-bar');
+    const thumb    = document.getElementById('lb-thumb');
+    const timeCur  = document.getElementById('lb-time');
+    const timeDur  = document.getElementById('lb-duration');
+
+    function syncPlay() {
+      playBtn.querySelector('.icon-play') .style.display = lbVideo.paused ? '' : 'none';
+      playBtn.querySelector('.icon-pause').style.display = lbVideo.paused ? 'none' : '';
+    }
+    function syncMute() {
+      muteBtn.querySelector('.icon-vol') .style.display = lbVideo.muted ? 'none' : '';
+      muteBtn.querySelector('.icon-mute').style.display = lbVideo.muted ? '' : 'none';
+    }
+    function syncProgress() {
+      const pct = lbVideo.duration ? (lbVideo.currentTime / lbVideo.duration * 100) : 0;
+      bar.style.width   = pct + '%';
+      thumb.style.left  = pct + '%';
+      timeCur.textContent = fmtTime(lbVideo.currentTime);
+    }
+    function seekTo(clientX) {
+      const r = progress.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+      lbVideo.currentTime = pct * lbVideo.duration;
+      syncProgress();
+    }
+
+    lbVideo.addEventListener('play',  syncPlay);
+    lbVideo.addEventListener('pause', syncPlay);
+    lbVideo.addEventListener('ended', () => { lbVideo.currentTime = 0; syncPlay(); });
+    lbVideo.addEventListener('loadedmetadata', () => { timeDur.textContent = fmtTime(lbVideo.duration); });
+    lbVideo.addEventListener('timeupdate', syncProgress);
+
+    playBtn.addEventListener('click', e => { e.stopPropagation(); lbVideo.paused ? lbVideo.play() : lbVideo.pause(); });
+    muteBtn.addEventListener('click', e => { e.stopPropagation(); lbVideo.muted = !lbVideo.muted; syncMute(); });
+
+    // click + drag on progress bar
+    let dragging = false;
+    progress.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      dragging = true;
+      progress.classList.add('dragging');
+      seekTo(e.clientX);
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      seekTo(e.clientX);
+    });
+    document.addEventListener('mouseup', () => { dragging = false; progress.classList.remove('dragging'); });
+
+    // volume slider
+    const volWrap  = document.getElementById('lb-volume-wrap');
+    const volTrack = document.getElementById('lb-volume-track');
+    const volBar   = document.getElementById('lb-volume-bar');
+    const volThumb = document.getElementById('lb-volume-thumb');
+    let _volume = parseFloat(localStorage.getItem('lb-volume') ?? '1');
+
+    function applyVolume(v) {
+      _volume = Math.max(0, Math.min(1, v));
+      localStorage.setItem('lb-volume', _volume);
+      lbVideo.volume = _volume;
+      lbVideo.muted  = _volume === 0;
+      volBar.style.width  = (_volume * 100) + '%';
+      volThumb.style.left = (_volume * 100) + '%';
+      syncMute();
+    }
+
+    function seekVolume(clientX) {
+      const r = volTrack.getBoundingClientRect();
+      applyVolume((clientX - r.left) / r.width);
+    }
+
+    let volDragging = false;
+    volTrack.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      volDragging = true;
+      volWrap.classList.add('dragging');
+      seekVolume(e.clientX);
+    });
+    document.addEventListener('mousemove', e => { if (volDragging) seekVolume(e.clientX); });
+    document.addEventListener('mouseup', () => { volDragging = false; volWrap.classList.remove('dragging'); });
+
+    lbVideo.addEventListener('volumechange', () => {
+      if (!volDragging) {
+        const v = lbVideo.muted ? 0 : lbVideo.volume;
+        volBar.style.width  = (v * 100) + '%';
+        volThumb.style.left = (v * 100) + '%';
+      }
+    });
+
+    window._lbApplyVolume = applyVolume;
+    window._lbGetVolume   = () => _volume;
+  })();
 
   let scale = 1, tx = 0, ty = 0, rotation = 0, flipH = 1, flipV = 1;
+  let _isVideo = false;
+
+  function activeEl() { return _isVideo ? lbVideo : lbImg; }
 
   function applyTransform() {
-    lbImg.style.transform =
+    activeEl().style.transform =
       `translate(${tx}px, ${ty}px) rotate(${rotation}deg) scale(${scale * flipH}, ${scale * flipV})`;
   }
 
   function resetTransform() {
     scale = 1; tx = 0; ty = 0; rotation = 0; flipH = 1; flipV = 1;
-    lbImg.style.transform = '';
+    lbImg.style.transform   = '';
+    lbVideo.style.transform = '';
   }
 
-  function openLightbox(src) {
+  function openLightbox(src, isVideo) {
     resetTransform();
-    lbImg.src = src;
+    _isVideo = !!isVideo;
+    if (_isVideo) {
+      lbVideo.src = src;
+      lbVideo.style.display = '';
+      lbImg.style.display = 'none';
+      lbToolbarPhoto.style.display = 'none';
+      lbToolbarVideo.style.display = '';
+      lb.style.paddingBottom = '105px';
+      if (window._lbApplyVolume) window._lbApplyVolume(window._lbGetVolume());
+    } else {
+      lbImg.src = src;
+      lbImg.style.display = '';
+      lbVideo.style.display = 'none';
+      lbVideo.pause?.();
+      lbVideo.src = '';
+      lbToolbarPhoto.style.display = '';
+      lbToolbarVideo.style.display = 'none';
+      lb.style.paddingBottom = '';
+    }
     lb.style.display = 'flex';
   }
 
   function closeLightbox() {
     lb.style.display = 'none';
     lbImg.src = '';
+    lbVideo.pause?.();
+    lbVideo.src = '';
+    lbVideo.style.display = 'none';
+    lbImg.style.display = '';
+    lbToolbarPhoto.style.display = '';
+    lbToolbarVideo.style.display = 'none';
+    lb.style.paddingBottom = '';
     resetTransform();
+    _isVideo = false;
   }
 
-  function saveImage() {
-    const canvas = document.createElement('canvas');
+  function saveMedia() {
+    if (_isVideo) {
+      const a = document.createElement('a');
+      a.href     = lbVideo.src;
+      a.download = 'video.mp4';
+      a.click();
+      return;
+    }
     const img = lbImg;
     const rad = rotation * Math.PI / 180;
     const sw = img.naturalWidth, sh = img.naturalHeight;
     const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+    const canvas = document.createElement('canvas');
     canvas.width  = Math.round(sw * cos + sh * sin);
     canvas.height = Math.round(sw * sin + sh * cos);
     const ctx = canvas.getContext('2d');
@@ -43,25 +181,26 @@
     ctx.scale(flipH, flipV);
     ctx.drawImage(img, -sw / 2, -sh / 2);
     const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
+    a.href     = canvas.toDataURL('image/png');
     a.download = 'photo.png';
     a.click();
   }
 
   document.addEventListener('click', e => {
     if (e.target.closest('.lightbox__close') || e.target.closest('.lightbox__tool')) return;
-    const img = e.target.closest('.post__image');
-    if (img) { openLightbox(img.src); return; }
+    const vidWrap = e.target.closest('.post__video');
+    if (vidWrap) { openLightbox(vidWrap.dataset.src, true); return; }
+    const img = e.target.closest('.post__image:not(.post__video)');
+    if (img) { openLightbox(img.src, false); return; }
     if (lb.style.display !== 'none' && e.target === lb) closeLightbox();
   });
 
   document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
-
   document.getElementById('lb-rotate-ccw').addEventListener('click', () => { rotation -= 90; applyTransform(); });
   document.getElementById('lb-rotate-cw') .addEventListener('click', () => { rotation += 90; applyTransform(); });
   document.getElementById('lb-flip-h')    .addEventListener('click', () => { flipH *= -1; applyTransform(); });
   document.getElementById('lb-flip-v')    .addEventListener('click', () => { flipV *= -1; applyTransform(); });
-  document.getElementById('lb-save')      .addEventListener('click', saveImage);
+  document.getElementById('lb-save')      .addEventListener('click', saveMedia);
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeLightbox();
@@ -70,20 +209,28 @@
   lb.addEventListener('wheel', e => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const factor   = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     const newScale = Math.min(10, Math.max(0.2, scale * factor));
-
     const rect = lb.getBoundingClientRect();
     const cx = e.clientX - rect.left - rect.width  / 2;
     const cy = e.clientY - rect.top  - rect.height / 2;
-
     tx = cx - (cx - tx) * (newScale / scale);
     ty = cy - (cy - ty) * (newScale / scale);
     scale = newScale;
-
     applyTransform();
   }, { passive: false });
+
+  document.getElementById('lb-rotate-ccw-v').addEventListener('click', () => { rotation -= 90; applyTransform(); });
+  document.getElementById('lb-rotate-cw-v') .addEventListener('click', () => { rotation += 90; applyTransform(); });
+  document.getElementById('lb-flip-h-v')    .addEventListener('click', () => { flipH *= -1; applyTransform(); });
+  document.getElementById('lb-flip-v-v')    .addEventListener('click', () => { flipV *= -1; applyTransform(); });
+
+  document.getElementById('lb-save-video').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = lbVideo.src;
+    a.download = 'video.mp4';
+    a.click();
+  });
 })();
 
 /* ── Emoji insert panel ─────────────────────── */
@@ -211,6 +358,38 @@
   });
 })();
 
+/* ── Custom video player ────────────────────── */
+function fmtTime(s) {
+  if (!isFinite(s)) return '0:00';
+  const m = Math.floor(s / 60), ss = Math.floor(s % 60);
+  return `${m}:${String(ss).padStart(2, '0')}`;
+}
+
+function buildVideoPlayer(src, extraClass = '') {
+  const wrap = document.createElement('div');
+  wrap.className = 'vplayer' + (extraClass ? ' ' + extraClass : '');
+  wrap.dataset.src = src;
+
+  const vid = document.createElement('video');
+  vid.className   = 'vplayer__video';
+  vid.src         = src;
+  vid.muted       = true;
+  vid.autoplay    = true;
+  vid.loop        = true;
+  vid.playsInline = true;
+  wrap.appendChild(vid);
+
+  return wrap;
+}
+
+function mountVideoPlayers(container) {
+  container.querySelectorAll('.post__video-wrap[data-src]').forEach(wrap => {
+    const src = wrap.dataset.src;
+    const player = buildVideoPlayer(src, 'post__video');
+    wrap.replaceWith(player);
+  });
+}
+
 /* ── Compose contenteditable helpers ───────── */
 function getComposeText(id) {
   const el = document.getElementById(id);
@@ -230,6 +409,16 @@ function clearComposeInput(id) {
   if (el) el.innerHTML = '';
 }
 
+function watchComposeEmpty(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const isEmpty = el.innerHTML === '' || el.innerHTML === '<br>' ||
+      el.textContent.replace(/​/g, '').trim() === '' && !el.querySelector('span[data-emoji]');
+    if (isEmpty) el.innerHTML = '';
+  });
+}
+
 /* ── Compose photo ──────────────────────────── */
 const _composeImages = { feed: [], profile: [] };
 
@@ -247,24 +436,36 @@ function initComposePhoto(ns) {
 
   input.addEventListener('change', () => {
     Array.from(input.files).forEach(file => {
-      const reader = new FileReader();
+      const isVideo = file.type.startsWith('video/');
+      const reader  = new FileReader();
       reader.onload = e => {
         const dataUrl = e.target.result;
-        _composeImages[ns].push(dataUrl);
+        _composeImages[ns].push({ src: dataUrl, type: isVideo ? 'video' : 'image', mime: file.type });
 
         const wrap = document.createElement('div');
         wrap.className = 'compose__preview-wrap';
-        const img = document.createElement('img');
-        img.src = dataUrl;
+
+        if (isVideo) {
+          const vid = document.createElement('video');
+          vid.src = dataUrl;
+          vid.muted = true;
+          vid.playsInline = true;
+          wrap.appendChild(vid);
+        } else {
+          const img = document.createElement('img');
+          img.src = dataUrl;
+          wrap.appendChild(img);
+        }
+
         const rm = document.createElement('button');
         rm.className = 'compose__preview-remove';
         rm.textContent = '×';
         rm.addEventListener('click', () => {
-          const idx = _composeImages[ns].indexOf(dataUrl);
+          const idx = _composeImages[ns].findIndex(m => m.src === dataUrl);
           if (idx !== -1) _composeImages[ns].splice(idx, 1);
           wrap.remove();
         });
-        wrap.append(img, rm);
+        wrap.appendChild(rm);
         previews.appendChild(wrap);
       };
       reader.readAsDataURL(file);
@@ -275,6 +476,9 @@ function initComposePhoto(ns) {
 
 initComposePhoto('feed');
 initComposePhoto('profile');
+
+watchComposeEmpty('feed-compose-input');
+watchComposeEmpty('profile-compose-input');
 
 /* ── Utils ─────────────────────────────────── */
 function escapeHtml(str) {
@@ -316,6 +520,20 @@ function isHeartOnly(text) {
   return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
 }
 
+let _emojiRegex = null;
+let _emojiMap   = null;
+
+async function getEmojiRegex() {
+  if (_emojiRegex) return { regex: _emojiRegex, map: _emojiMap };
+  const entries = await loadEmojiList();
+  if (!entries.length) return null;
+  _emojiMap = new Map(entries.map(e => [e.emoji, e.file]));
+  const sorted  = [..._emojiMap.keys()].sort((a, b) => b.length - a.length);
+  const escaped = sorted.map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  _emojiRegex = new RegExp(escaped.join('|'), 'gu');
+  return { regex: _emojiRegex, map: _emojiMap };
+}
+
 function buildPostTextEl(text) {
   const p = document.createElement('p');
   p.className = 'post__text';
@@ -328,16 +546,11 @@ function buildPostTextEl(text) {
     return p;
   }
 
-  // Render immediately as plain text, then async-swap TGS emojis
   p.textContent = text;
 
-  loadEmojiList().then(entries => {
-    if (!entries.length) return;
-    const emojiMap = new Map(entries.map(e => [e.emoji, e.file]));
-    const sorted   = [...emojiMap.keys()].sort((a, b) => b.length - a.length);
-    const escaped  = sorted.map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    if (!escaped.length) return;
-    const regex = new RegExp(escaped.join('|'), 'gu');
+  getEmojiRegex().then(result => {
+    if (!result) return;
+    const { regex, map: emojiMap } = result;
 
     function processNode(node) {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -352,7 +565,7 @@ function buildPostTextEl(text) {
           const file = emojiMap.get(m[0]);
           if (file) {
             // placeholder — TGS загружается лениво через IntersectionObserver внутри createTgsPlayer
-            const player = createTgsPlayer(file, 28, true, false);
+            const player = createTgsPlayer(file, 20, true, false);
             player.classList.add('post__text-tgs');
             frag.appendChild(player);
           } else {
@@ -464,6 +677,20 @@ function startEditPost(id, postEl, onDone) {
 
 function deletePost(id, onDone) {
   savePosts(getPosts().filter(p => p.id !== id));
+
+  const el = document.querySelector(`.post[data-post-id="${id}"]`);
+  if (el) {
+    // убираем разделитель даты если после него не осталось постов
+    const prev = el.previousElementSibling;
+    const next = el.nextElementSibling;
+    if (prev?.classList.contains('date-separator') &&
+        (!next || next.classList.contains('date-separator') || next.classList.contains('feed-sentinel'))) {
+      prev.remove();
+    }
+    el.remove();
+    return;
+  }
+
   onDone();
 }
 
@@ -703,7 +930,10 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   const isTall = isVerified && (hasImages || newlineCount >= 2 || (post.text && post.text.length > 150));
   const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : '';
   const el = document.createElement('div');
-  el.className = 'post' + extra;
+  el.className = 'post post--enter' + extra;
+  el.dataset.postId = post.id;
+  const delay = (i % 5) * 50;
+  el.style.animationDelay = delay + 'ms';
   const verifiedGradientSvg = isVerified ? `
     <svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <defs>
@@ -748,7 +978,14 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     ${post.text ? `<div class="post__text-wrap"></div>` : ''}
     ${post.images && post.images.length ? `
     <div class="post__images post__images--${Math.min(post.images.length, 4)}">
-      ${post.images.slice(0, 4).map(src => `<img class="post__image" src="${src}" alt="" />`).join('')}
+      ${post.images.slice(0, 4).map(m => {
+        const item = typeof m === 'string' ? { src: m, type: 'image', mime: '' } : m;
+        if (item.type === 'video') {
+          return `<div class="post__video-wrap" data-src="${item.src}"></div>`;
+        }
+        const isGif = item.mime === 'image/gif' || item.src.startsWith('data:image/gif');
+        return `<img class="post__image${isGif ? ' post__image--gif' : ''}" src="${item.src}" alt="" />`;
+      }).join('')}
     </div>` : ''}
     <div class="post__footer">
       <div class="post__reactions" data-post-id="${post.id}"></div>
@@ -765,6 +1002,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   el.querySelector('.post__reactions').replaceWith(buildReactionsEl(post));
   const textWrap = el.querySelector('.post__text-wrap');
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
+  mountVideoPlayers(el);
   return el;
 }
 
