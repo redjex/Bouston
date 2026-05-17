@@ -33,7 +33,7 @@
           <label class="btn-photo" for="feed-photo-input" title="Добавить фото">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </label>
-          <input type="file" id="feed-photo-input" accept="image/*" multiple style="display:none" />
+          <input type="file" id="feed-photo-input" accept="image/*,video/*" multiple style="display:none" />
           <button class="btn-photo btn-emoji-open" data-target="feed-compose-input" title="Добавить эмодзи">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
           </button>
@@ -84,7 +84,7 @@
           <label class="btn-photo" for="profile-photo-input" title="Добавить фото">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </label>
-          <input type="file" id="profile-photo-input" accept="image/*" multiple style="display:none" />
+          <input type="file" id="profile-photo-input" accept="image/*,video/*" multiple style="display:none" />
           <button class="btn-photo btn-emoji-open" data-target="profile-compose-input" title="Добавить эмодзи">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
           </button>
@@ -178,24 +178,51 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
     <img class="lightbox__img" id="lightbox-img" src="" alt="" />
-    <div class="lightbox__toolbar">
-      <button class="lightbox__tool" id="lb-rotate-ccw" title="Повернуть влево">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
-      </button>
-      <button class="lightbox__tool" id="lb-rotate-cw" title="Повернуть вправо">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-4.95"/></svg>
-      </button>
+    <video class="lightbox__img" id="lightbox-video" src="" playsinline style="display:none"></video>
+
+    <!-- toolbar для фото -->
+    <div class="lightbox__toolbar" id="lb-toolbar-photo">
+      <button class="lightbox__tool" id="lb-rotate-ccw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg></button>
+      <button class="lightbox__tool" id="lb-rotate-cw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-4.95"/></svg></button>
       <div class="lightbox__toolbar-sep"></div>
-      <button class="lightbox__tool" id="lb-flip-h" title="Отразить по горизонтали">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 7l4 5-4 5M21 7l-4 5 4 5"/></svg>
-      </button>
-      <button class="lightbox__tool" id="lb-flip-v" title="Отразить по вертикали">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M7 3l5 4 5-4M7 21l5-4 5 4"/></svg>
-      </button>
+      <button class="lightbox__tool" id="lb-flip-h"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 7l4 5-4 5M21 7l-4 5 4 5"/></svg></button>
+      <button class="lightbox__tool" id="lb-flip-v"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M7 3l5 4 5-4M7 21l5-4 5 4"/></svg></button>
       <div class="lightbox__toolbar-sep"></div>
-      <button class="lightbox__tool lightbox__tool--save" id="lb-save" title="Сохранить">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <button class="lightbox__tool lightbox__tool--save" id="lb-save"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+    </div>
+
+    <!-- toolbar для видео -->
+    <div class="lightbox__toolbar lightbox__toolbar--video" id="lb-toolbar-video" style="display:none">
+      <button class="lightbox__tool" id="lb-play-btn">
+        <svg class="icon-play" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+        <svg class="icon-pause" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
       </button>
+      <span class="lb-time" id="lb-time">0:00</span>
+      <div class="lb-progress" id="lb-progress">
+        <div class="lb-progress__bar" id="lb-bar"></div>
+        <div class="lb-progress__thumb" id="lb-thumb"></div>
+      </div>
+      <span class="lb-time" id="lb-duration">0:00</span>
+      <div class="lb-volume-wrap" id="lb-volume-wrap">
+        <button class="lightbox__tool" id="lb-mute-btn">
+          <svg class="icon-vol" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <svg class="icon-mute" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+        <div class="lb-volume-slider" id="lb-volume-slider">
+          <div class="lb-volume-track" id="lb-volume-track">
+            <div class="lb-volume-bar" id="lb-volume-bar"></div>
+            <div class="lb-volume-thumb" id="lb-volume-thumb"></div>
+          </div>
+        </div>
+      </div>
+      <div class="lightbox__toolbar-sep"></div>
+      <button class="lightbox__tool" id="lb-rotate-ccw-v"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg></button>
+      <button class="lightbox__tool" id="lb-rotate-cw-v"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-4.95"/></svg></button>
+      <div class="lightbox__toolbar-sep"></div>
+      <button class="lightbox__tool" id="lb-flip-h-v"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 7l4 5-4 5M21 7l-4 5 4 5"/></svg></button>
+      <button class="lightbox__tool" id="lb-flip-v-v"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M7 3l5 4 5-4M7 21l5-4 5 4"/></svg></button>
+      <div class="lightbox__toolbar-sep"></div>
+      <button class="lightbox__tool lightbox__tool--save" id="lb-save-video"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
     </div>
   </div>
 
