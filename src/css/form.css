@@ -99,3 +99,12 @@
   background: var(--progress-gradient);
   transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+
+.field__error {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  color: #e05555;
+  padding-left: 0.2rem;
+}

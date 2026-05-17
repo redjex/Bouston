@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
@@ -26,8 +26,8 @@ function createWindow() {
   const winBounds = isApp ? (data.windowBounds || {}) : {};
 
   mainWindow = new BrowserWindow({
-    width:  isApp ? (winBounds.width  || 1080) : 1080,
-    height: isApp ? (winBounds.height || 608)  : 648,
+    width:  isApp ? (winBounds.width  || 1080) : 1250,
+    height: isApp ? (winBounds.height || 608)  : 720,
     x:      isApp ? winBounds.x : undefined,
     y:      isApp ? winBounds.y : undefined,
     resizable: isApp,
@@ -55,6 +55,7 @@ function createWindow() {
   }
 
   function saveBounds() {
+    if (!isApp) return;
     const d = readData();
     d.windowMaximized = mainWindow.isMaximized();
     if (!mainWindow.isMaximized() && !mainWindow.isMinimized()) {
@@ -83,6 +84,7 @@ ipcMain.handle('emoji:list', () =>
     .map(f => ({ file: f, emoji: f.replace(/^\d+_/, '').replace(/\.tgs$/, '') }))
 );
 
+ipcMain.on('shell:open', (_e, url) => shell.openExternal(url));
 ipcMain.on('win:minimize', () => mainWindow?.minimize());
 ipcMain.on('win:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
 ipcMain.on('win:close',    () => mainWindow?.close());
