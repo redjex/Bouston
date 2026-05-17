@@ -47,8 +47,32 @@ function syncModalPreview(imgId, btnId, src, alwaysShow) {
 }
 
 /* ── Render profile posts ───────────────────── */
+const PROFILE_PAGE = 10;
+let _profileObserver = null;
+
+function attachProfileMenu(container) {
+  container.querySelectorAll('.post__more-wrap:not([data-bound])').forEach(wrap => {
+    wrap.dataset.bound = '1';
+    const btn    = wrap.querySelector('.post__more');
+    const id     = Number(btn.dataset.id);
+    const postEl = wrap.closest('.post');
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (_openMenuId === id) { closeAllMenus(); return; }
+      openPostMenu(id, postEl, _profileWrap, [
+        { src: '../../img/trash.svg', action: () => { closeAllMenus(); deletePost(id, renderProfilePosts); } },
+        { src: '../../img/edit.svg',  action: () => { closeAllMenus(); startEditPost(id, postEl, renderProfilePosts); } },
+        { src: '../../img/pin.svg',   action: () => { closeAllMenus(); pinPost(id, renderProfilePosts); } },
+        { src: '../../img/close.svg', action: () => closeAllMenus() },
+      ]);
+    });
+  });
+}
+
 function renderProfilePosts() {
   closeAllMenus();
+  if (_profileObserver) { _profileObserver.disconnect(); _profileObserver = null; }
+
   const container  = document.getElementById('profile-posts-container');
   const profile    = getProfile();
   const posts      = getPosts();
@@ -72,33 +96,38 @@ function renderProfilePosts() {
     return 0;
   });
 
+  let rendered = 0;
   let lastDateKey = null;
-  sorted.forEach((post, i) => {
-    const ts = post.createdAt || post.id;
-    const dateKey = getDateKey(ts);
-    if (dateKey !== lastDateKey) {
-      container.appendChild(buildDateSeparator(ts));
-      lastDateKey = dateKey;
-    }
-    const el = buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, true);
-    container.appendChild(el);
-  });
 
-  container.querySelectorAll('.post__more-wrap').forEach(wrap => {
-    const btn    = wrap.querySelector('.post__more');
-    const id     = Number(btn.dataset.id);
-    const postEl = wrap.closest('.post');
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (_openMenuId === id) { closeAllMenus(); return; }
-      openPostMenu(id, postEl, _profileWrap, [
-        { src: '../../img/trash.svg', action: () => { closeAllMenus(); deletePost(id, renderProfilePosts); } },
-        { src: '../../img/edit.svg',  action: () => { closeAllMenus(); startEditPost(id, postEl, renderProfilePosts); } },
-        { src: '../../img/pin.svg',   action: () => { closeAllMenus(); pinPost(id, renderProfilePosts); } },
-        { src: '../../img/close.svg', action: () => closeAllMenus() },
-      ]);
+  function renderBatch() {
+    const batch = sorted.slice(rendered, rendered + PROFILE_PAGE);
+    batch.forEach((post, i) => {
+      const ts = post.createdAt || post.id;
+      const dateKey = getDateKey(ts);
+      if (dateKey !== lastDateKey) {
+        container.appendChild(buildDateSeparator(ts));
+        lastDateKey = dateKey;
+      }
+      container.appendChild(buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, rendered + i, true));
     });
-  });
+    rendered += batch.length;
+    attachProfileMenu(container);
+
+    const sentinel = container.querySelector('.feed-sentinel');
+    if (sentinel) sentinel.remove();
+
+    if (rendered < sorted.length) {
+      const s = document.createElement('div');
+      s.className = 'feed-sentinel';
+      container.appendChild(s);
+      _profileObserver = new IntersectionObserver(([e]) => {
+        if (e.isIntersecting) { _profileObserver.disconnect(); renderBatch(); }
+      }, { rootMargin: '200px' });
+      _profileObserver.observe(s);
+    }
+  }
+
+  renderBatch();
 }
 
 /* ── Modal ───────────────────────────────────── */
@@ -193,15 +222,15 @@ document.getElementById('btn-save').addEventListener('click', () => {
 
 /* ── Profile compose ─────────────────────────── */
 document.getElementById('profile-btn-post').addEventListener('click', () => {
-  const input = document.getElementById('profile-compose-input');
-  const text  = input.value.trim();
-  if (!text) return;
+  const text   = getComposeText('profile-compose-input').trim();
+  const images = getComposeImages('profile');
+  if (!text && !images.length) return;
   const now = Date.now();
   const posts = getPosts();
-  posts.unshift({ id: now, text, likes: 0, liked: false, createdAt: now });
+  posts.unshift({ id: now, text, images, likes: 0, liked: false, createdAt: now });
   savePosts(posts);
-  input.value = '';
-  input.style.height = 'auto';
+  clearComposeInput('profile-compose-input');
+  clearComposeImages('profile');
   renderProfilePosts();
 });
 
@@ -210,8 +239,4 @@ document.getElementById('profile-compose-input').addEventListener('keydown', e =
     e.preventDefault();
     document.getElementById('profile-btn-post').click();
   }
-});
-document.getElementById('profile-compose-input').addEventListener('input', function () {
-  this.style.height = 'auto';
-  this.style.height = this.scrollHeight + 'px';
 });

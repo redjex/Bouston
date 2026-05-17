@@ -1,5 +1,281 @@
 'use strict';
 
+/* ── Lightbox ───────────────────────────────── */
+(function () {
+  const lb    = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lightbox-img');
+
+  let scale = 1, tx = 0, ty = 0, rotation = 0, flipH = 1, flipV = 1;
+
+  function applyTransform() {
+    lbImg.style.transform =
+      `translate(${tx}px, ${ty}px) rotate(${rotation}deg) scale(${scale * flipH}, ${scale * flipV})`;
+  }
+
+  function resetTransform() {
+    scale = 1; tx = 0; ty = 0; rotation = 0; flipH = 1; flipV = 1;
+    lbImg.style.transform = '';
+  }
+
+  function openLightbox(src) {
+    resetTransform();
+    lbImg.src = src;
+    lb.style.display = 'flex';
+  }
+
+  function closeLightbox() {
+    lb.style.display = 'none';
+    lbImg.src = '';
+    resetTransform();
+  }
+
+  function saveImage() {
+    const canvas = document.createElement('canvas');
+    const img = lbImg;
+    const rad = rotation * Math.PI / 180;
+    const sw = img.naturalWidth, sh = img.naturalHeight;
+    const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+    canvas.width  = Math.round(sw * cos + sh * sin);
+    canvas.height = Math.round(sw * sin + sh * cos);
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(rad);
+    ctx.scale(flipH, flipV);
+    ctx.drawImage(img, -sw / 2, -sh / 2);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'photo.png';
+    a.click();
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('.lightbox__close') || e.target.closest('.lightbox__tool')) return;
+    const img = e.target.closest('.post__image');
+    if (img) { openLightbox(img.src); return; }
+    if (lb.style.display !== 'none' && e.target === lb) closeLightbox();
+  });
+
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+
+  document.getElementById('lb-rotate-ccw').addEventListener('click', () => { rotation -= 90; applyTransform(); });
+  document.getElementById('lb-rotate-cw') .addEventListener('click', () => { rotation += 90; applyTransform(); });
+  document.getElementById('lb-flip-h')    .addEventListener('click', () => { flipH *= -1; applyTransform(); });
+  document.getElementById('lb-flip-v')    .addEventListener('click', () => { flipV *= -1; applyTransform(); });
+  document.getElementById('lb-save')      .addEventListener('click', saveImage);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeLightbox();
+  });
+
+  lb.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const newScale = Math.min(10, Math.max(0.2, scale * factor));
+
+    const rect = lb.getBoundingClientRect();
+    const cx = e.clientX - rect.left - rect.width  / 2;
+    const cy = e.clientY - rect.top  - rect.height / 2;
+
+    tx = cx - (cx - tx) * (newScale / scale);
+    ty = cy - (cy - ty) * (newScale / scale);
+    scale = newScale;
+
+    applyTransform();
+  }, { passive: false });
+})();
+
+/* ── Emoji insert panel ─────────────────────── */
+(function () {
+  const panel   = document.getElementById('emoji-panel');
+  const grid    = document.getElementById('emoji-panel-grid');
+  let _target   = null;
+  let _activBtn = null;
+  let _loaded   = false;
+
+  function positionPanel(triggerBtn) {
+    const compose = triggerBtn.closest('.compose');
+    const r  = (compose || triggerBtn).getBoundingClientRect();
+    const pw = 280;
+    let left = r.right + 12;
+    let top  = r.top;
+    left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+    top  = Math.max(8, top);
+    panel.style.top  = top  + 'px';
+    panel.style.left = left + 'px';
+  }
+
+  async function populateGrid() {
+    if (_loaded) return;
+    _loaded = true;
+    const entries = await loadEmojiList();
+    const itemSz = Math.floor((280 - 16) / 6) - 2;
+    const io = new IntersectionObserver(obs => {
+      obs.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const btn = entry.target;
+        if (btn.dataset.tgsLoaded) return;
+        btn.dataset.tgsLoaded = '1';
+        io.unobserve(btn);
+        const player = createTgsPlayer(btn.dataset.file, itemSz, false);
+        player.dataset.tgs = '1';
+        btn.appendChild(player);
+      });
+    }, { root: grid, rootMargin: '80px' });
+
+    entries.forEach(({ file, emoji }) => {
+      const btn = document.createElement('button');
+      btn.className = 'emoji-panel__btn';
+      btn.dataset.file  = file;
+      btn.dataset.emoji = emoji;
+      btn.addEventListener('click', () => {
+        insertEmoji(emoji, file);
+        btn.style.transform = 'scale(1.25)';
+        setTimeout(() => { btn.style.transform = ''; }, 120);
+      });
+      grid.appendChild(btn);
+      io.observe(btn);
+    });
+  }
+
+  function insertEmoji(emoji, file) {
+    if (!_target) return;
+    const el = document.getElementById(_target);
+    if (!el) return;
+    el.focus();
+
+    const wrap = document.createElement('span');
+    wrap.className = 'compose__emoji-node';
+    wrap.contentEditable = 'false';
+    wrap.dataset.emoji = emoji;
+    const player = createTgsPlayer(file, 26, true, true);
+    wrap.appendChild(player);
+
+    const after = document.createTextNode('​');
+
+    const sel = window.getSelection();
+    let inserted = false;
+    if (sel && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      if (el.contains(range.commonAncestorContainer)) {
+        range.deleteContents();
+        range.insertNode(wrap);
+        range.setStartAfter(wrap);
+        range.collapse(true);
+        range.insertNode(after);
+        range.setStart(after, 1);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        inserted = true;
+      }
+    }
+    if (!inserted) {
+      el.appendChild(wrap);
+      el.appendChild(after);
+      const r = document.createRange();
+      r.setStart(after, 1);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }
+
+  function openPanel(targetId, triggerBtn) {
+    _target   = targetId;
+    _activBtn = triggerBtn;
+    triggerBtn.classList.add('active');
+    positionPanel(triggerBtn);
+    panel.classList.add('emoji-panel--open');
+    populateGrid();
+  }
+
+  function closePanel() {
+    panel.classList.remove('emoji-panel--open');
+    if (_activBtn) { _activBtn.classList.remove('active'); _activBtn = null; }
+    _target = null;
+  }
+
+  document.querySelectorAll('.btn-emoji-open').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (_activBtn === btn) { closePanel(); return; }
+      if (_activBtn) closePanel();
+      openPanel(btn.dataset.target, btn);
+    });
+  });
+
+  document.addEventListener('click', e => {
+    if (!panel.contains(e.target) && !e.target.closest('.btn-emoji-open')) closePanel();
+  });
+})();
+
+/* ── Compose contenteditable helpers ───────── */
+function getComposeText(id) {
+  const el = document.getElementById(id);
+  if (!el) return '';
+  let text = '';
+  el.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent.replace(/​/g, '');
+    else if (node.dataset?.emoji) text += node.dataset.emoji;
+    else if (node.nodeName === 'BR') text += '\n';
+    else text += node.textContent;
+  });
+  return text;
+}
+
+function clearComposeInput(id) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = '';
+}
+
+/* ── Compose photo ──────────────────────────── */
+const _composeImages = { feed: [], profile: [] };
+
+function getComposeImages(ns) { return _composeImages[ns] || []; }
+function clearComposeImages(ns) {
+  _composeImages[ns] = [];
+  const el = document.getElementById(`${ns}-compose-previews`);
+  if (el) el.innerHTML = '';
+}
+
+function initComposePhoto(ns) {
+  const input    = document.getElementById(`${ns}-photo-input`);
+  const previews = document.getElementById(`${ns}-compose-previews`);
+  if (!input || !previews) return;
+
+  input.addEventListener('change', () => {
+    Array.from(input.files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const dataUrl = e.target.result;
+        _composeImages[ns].push(dataUrl);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'compose__preview-wrap';
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        const rm = document.createElement('button');
+        rm.className = 'compose__preview-remove';
+        rm.textContent = '×';
+        rm.addEventListener('click', () => {
+          const idx = _composeImages[ns].indexOf(dataUrl);
+          if (idx !== -1) _composeImages[ns].splice(idx, 1);
+          wrap.remove();
+        });
+        wrap.append(img, rm);
+        previews.appendChild(wrap);
+      };
+      reader.readAsDataURL(file);
+    });
+    input.value = '';
+  });
+}
+
+initComposePhoto('feed');
+initComposePhoto('profile');
+
 /* ── Utils ─────────────────────────────────── */
 function escapeHtml(str) {
   return String(str)
@@ -38,6 +314,63 @@ function buildDateSeparator(ts) {
 }
 function isHeartOnly(text) {
   return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
+}
+
+function buildPostTextEl(text) {
+  const p = document.createElement('p');
+  p.className = 'post__text';
+
+  if (isHeartOnly(text)) {
+    const span = document.createElement('span');
+    span.className = 'heart-source';
+    span.textContent = text;
+    p.appendChild(span);
+    return p;
+  }
+
+  // Render immediately as plain text, then async-swap TGS emojis
+  p.textContent = text;
+
+  loadEmojiList().then(entries => {
+    if (!entries.length) return;
+    const emojiMap = new Map(entries.map(e => [e.emoji, e.file]));
+    const sorted   = [...emojiMap.keys()].sort((a, b) => b.length - a.length);
+    const escaped  = sorted.map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (!escaped.length) return;
+    const regex = new RegExp(escaped.join('|'), 'gu');
+
+    function processNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const val = node.nodeValue;
+        regex.lastIndex = 0;
+        if (!regex.test(val)) return;
+        regex.lastIndex = 0;
+        const frag = document.createDocumentFragment();
+        let last = 0, m;
+        while ((m = regex.exec(val)) !== null) {
+          if (m.index > last) frag.appendChild(document.createTextNode(val.slice(last, m.index)));
+          const file = emojiMap.get(m[0]);
+          if (file) {
+            // placeholder — TGS загружается лениво через IntersectionObserver внутри createTgsPlayer
+            const player = createTgsPlayer(file, 28, true, false);
+            player.classList.add('post__text-tgs');
+            frag.appendChild(player);
+          } else {
+            frag.appendChild(document.createTextNode(m[0]));
+          }
+          last = m.index + m[0].length;
+        }
+        if (last < val.length) frag.appendChild(document.createTextNode(val.slice(last)));
+        node.replaceWith(frag);
+      } else {
+        Array.from(node.childNodes).forEach(processNode);
+      }
+    }
+
+    Array.from(p.childNodes).forEach(processNode);
+  });
+
+  return p;
 }
 
 
@@ -223,7 +556,12 @@ function buildReactionsEl(post) {
     .filter(e => e !== '❤️' && (post.reactions[e] || 0) > 0)
     .sort((a, b) => (post.reactions[b] || 0) - (post.reactions[a] || 0));
 
-  ['❤️', ...others].forEach(emoji => {
+  const heartCount = post.reactions['❤️'] || 0;
+  const heartIdx = others.findIndex(e => (post.reactions[e] || 0) <= heartCount);
+  const insertAt = heartIdx === -1 ? others.length : heartIdx;
+  const ordered = [...others.slice(0, insertAt), '❤️', ...others.slice(insertAt)];
+
+  ordered.forEach(emoji => {
     const count = post.reactions[emoji] || 0;
     const active = post.myReactions.includes(emoji);
 
@@ -287,13 +625,10 @@ function closeEmojiMenu() {
   if (_emojiMenuCleanup) { _emojiMenuCleanup(); _emojiMenuCleanup = null; }
 }
 
-const GRID_COLS    = 5;
-const GRID_ITEM_SZ = 52;
-const GRID_GAP     = 4;
-const GRID_ROWS    = 4;
-const GRID_PAD     = 8;
-const MENU_W = GRID_COLS * GRID_ITEM_SZ + (GRID_COLS - 1) * GRID_GAP + GRID_PAD * 2;
-const MENU_H = GRID_ROWS * GRID_ITEM_SZ + (GRID_ROWS - 1) * GRID_GAP + GRID_PAD * 2;
+const GRID_COLS = 2;
+const GRID_GAP  = 4;
+const GRID_PAD  = 8;
+const GRID_ROWS = 5;
 
 async function openEmojiMenu(id, likeBtn, scrollContainer) {
   closeEmojiMenu();
@@ -309,20 +644,36 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
 
   const postEl = likeBtn.closest('.post');
 
+  const ITEM_SZ = 36;
+  const MENU_W  = GRID_COLS * ITEM_SZ + (GRID_COLS - 1) * GRID_GAP + GRID_PAD * 2;
+  menu.style.setProperty('--item-sz', ITEM_SZ + 'px');
+
   function updatePos() {
     const r = (postEl || likeBtn).getBoundingClientRect();
     menu.style.left = (r.left - MENU_W - 8) + 'px';
     menu.style.top  = r.top + 'px';
   }
 
+  const visibleCount = GRID_COLS * GRID_ROWS;
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const btn = entry.target;
+      if (btn.dataset.tgsLoaded) return;
+      btn.dataset.tgsLoaded = '1';
+      io.unobserve(btn);
+      const itemSz = parseInt(menu.style.getPropertyValue('--item-sz')) || 44;
+      const player = createTgsPlayer(btn.dataset.file, itemSz - 4);
+      player.dataset.tgs = '1';
+      btn.prepend(player);
+    });
+  }, { root: menu, rootMargin: '60px' });
+
   entries.forEach(({ file, emoji }) => {
     const btn = document.createElement('button');
     btn.className = 'post__emoji-item' + (post.myReactions.includes(emoji) ? ' post__emoji-item--active' : '');
     btn.dataset.emoji = emoji;
-
-    const player = createTgsPlayer(file, GRID_ITEM_SZ - 8);
-    player.dataset.tgs = '1';
-    btn.appendChild(player);
+    btn.dataset.file = file;
 
     btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -330,6 +681,7 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
       closeEmojiMenu();
     });
     menu.appendChild(btn);
+    io.observe(btn);
   });
 
   document.body.appendChild(menu);
@@ -346,8 +698,9 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
 
 /* ── Build post element ─────────────────────── */
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
-  const newlineCount = (post.text.match(/\n/g) || []).length;
-  const isTall = isVerified && (newlineCount >= 2 || post.text.length > 150);
+  const newlineCount = (post.text ? post.text.match(/\n/g) || [] : []).length;
+  const hasImages = post.images && post.images.length > 0;
+  const isTall = isVerified && (hasImages || newlineCount >= 2 || (post.text && post.text.length > 150));
   const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : '';
   const el = document.createElement('div');
   el.className = 'post' + extra;
@@ -392,11 +745,11 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         </button>
       </div>
     </div>
-    <p class="post__text">${
-      isHeartOnly(post.text)
-        ? `<span class="heart-source">${escapeHtml(post.text)}</span>`
-        : escapeHtml(post.text)
-    }</p>
+    ${post.text ? `<div class="post__text-wrap"></div>` : ''}
+    ${post.images && post.images.length ? `
+    <div class="post__images post__images--${Math.min(post.images.length, 4)}">
+      ${post.images.slice(0, 4).map(src => `<img class="post__image" src="${src}" alt="" />`).join('')}
+    </div>` : ''}
     <div class="post__footer">
       <div class="post__reactions" data-post-id="${post.id}"></div>
       <button class="btn-comments" onclick="openThread(${post.id})">
@@ -410,6 +763,8 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     </div>
   `;
   el.querySelector('.post__reactions').replaceWith(buildReactionsEl(post));
+  const textWrap = el.querySelector('.post__text-wrap');
+  if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
   return el;
 }
 

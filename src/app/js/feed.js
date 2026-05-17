@@ -7,8 +7,33 @@ function renderFeedComposeAvatar() {
   if (el) el.src = getProfile().avatar || '../../img/logo_blue.png';
 }
 
+const FEED_PAGE = 10;
+let _feedObserver = null;
+
+function attachFeedMenu(container) {
+  const profile = getProfile();
+  const isVerified = profile.verified === true;
+  container.querySelectorAll('.post__more-wrap:not([data-bound])').forEach(wrap => {
+    wrap.dataset.bound = '1';
+    const btn    = wrap.querySelector('.post__more');
+    const id     = Number(btn.dataset.id);
+    const postEl = wrap.closest('.post');
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (_openMenuId === id) { closeAllMenus(); return; }
+      openPostMenu(id, postEl, _feedEl, [
+        { src: '../../img/trash.svg', action: () => { closeAllMenus(); deletePost(id, renderFeedPosts); } },
+        { src: '../../img/edit.svg',  action: () => { closeAllMenus(); startEditPost(id, postEl, renderFeedPosts); } },
+        { src: '../../img/close.svg', action: () => closeAllMenus() },
+      ]);
+    });
+  });
+}
+
 function renderFeedPosts() {
   closeAllMenus();
+  if (_feedObserver) { _feedObserver.disconnect(); _feedObserver = null; }
+
   const container = document.getElementById('posts-container');
   const profile   = getProfile();
   const posts     = getPosts();
@@ -25,44 +50,50 @@ function renderFeedPosts() {
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
     : '';
 
+  let rendered = 0;
   let lastDateKey = null;
-  posts.forEach((post, i) => {
-    const ts = post.createdAt || post.id;
-    const dateKey = getDateKey(ts);
-    if (dateKey !== lastDateKey) {
-      container.appendChild(buildDateSeparator(ts));
-      lastDateKey = dateKey;
-    }
-    const el = buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, false);
-    container.appendChild(el);
-  });
 
-  container.querySelectorAll('.post__more-wrap').forEach(wrap => {
-    const btn    = wrap.querySelector('.post__more');
-    const id     = Number(btn.dataset.id);
-    const postEl = wrap.closest('.post');
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (_openMenuId === id) { closeAllMenus(); return; }
-      openPostMenu(id, postEl, _feedEl, [
-        { src: '../../img/trash.svg', action: () => { closeAllMenus(); deletePost(id, renderFeedPosts); } },
-        { src: '../../img/edit.svg',  action: () => { closeAllMenus(); startEditPost(id, postEl, renderFeedPosts); } },
-        { src: '../../img/close.svg', action: () => closeAllMenus() },
-      ]);
+  function renderBatch() {
+    const batch = posts.slice(rendered, rendered + FEED_PAGE);
+    batch.forEach((post, i) => {
+      const ts = post.createdAt || post.id;
+      const dateKey = getDateKey(ts);
+      if (dateKey !== lastDateKey) {
+        container.appendChild(buildDateSeparator(ts));
+        lastDateKey = dateKey;
+      }
+      container.appendChild(buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, rendered + i, false));
     });
-  });
+    rendered += batch.length;
+    attachFeedMenu(container);
+
+    const sentinel = container.querySelector('.feed-sentinel');
+    if (sentinel) sentinel.remove();
+
+    if (rendered < posts.length) {
+      const s = document.createElement('div');
+      s.className = 'feed-sentinel';
+      container.appendChild(s);
+      _feedObserver = new IntersectionObserver(([e]) => {
+        if (e.isIntersecting) { _feedObserver.disconnect(); renderBatch(); }
+      }, { rootMargin: '200px' });
+      _feedObserver.observe(s);
+    }
+  }
+
+  renderBatch();
 }
 
 document.getElementById('feed-btn-post').addEventListener('click', () => {
-  const input = document.getElementById('feed-compose-input');
-  const text  = input.value.trim();
-  if (!text) return;
+  const text   = getComposeText('feed-compose-input').trim();
+  const images = getComposeImages('feed');
+  if (!text && !images.length) return;
   const now = Date.now();
   const posts = getPosts();
-  posts.unshift({ id: now, text, likes: 0, liked: false, createdAt: now });
+  posts.unshift({ id: now, text, images, likes: 0, liked: false, createdAt: now });
   savePosts(posts);
-  input.value = '';
-  input.style.height = 'auto';
+  clearComposeInput('feed-compose-input');
+  clearComposeImages('feed');
   renderFeedPosts();
 });
 
@@ -71,8 +102,4 @@ document.getElementById('feed-compose-input').addEventListener('keydown', e => {
     e.preventDefault();
     document.getElementById('feed-btn-post').click();
   }
-});
-document.getElementById('feed-compose-input').addEventListener('input', function () {
-  this.style.height = 'auto';
-  this.style.height = this.scrollHeight + 'px';
 });
