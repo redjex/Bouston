@@ -23,7 +23,7 @@ async function fetchTgsData(file) {
 
 function createTgsPlayer(file, size = 40, autoplay = false) {
   const container = document.createElement('div');
-  container.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;`;
+  container.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;overflow:visible;`;
 
   let animation = null;
 
@@ -34,9 +34,13 @@ function createTgsPlayer(file, size = 40, autoplay = false) {
       animation = lottie.loadAnimation({
         container,
         animationData: JSON.parse(JSON.stringify(json)),
-        renderer:  'canvas',
+        renderer:  'svg',
         loop:      true,
         autoplay,
+        rendererSettings: {
+          progressiveLoad: true,
+          preserveAspectRatio: 'xMidYMid meet',
+        },
       });
       if (!autoplay) animation.goToAndStop(0, true);
     }).catch(() => {});
