@@ -22,14 +22,15 @@ function createWindow() {
   Menu.setApplicationMenu(null);
 
   const data = readData();
-  const winBounds = data.windowBounds || {};
+  const isApp = data.position === 1;
+  const winBounds = isApp ? (data.windowBounds || {}) : {};
 
   mainWindow = new BrowserWindow({
-    width:  winBounds.width  || 1080,
-    height: winBounds.height || 608,
-    x:      winBounds.x,
-    y:      winBounds.y,
-    resizable: data.position === 1,
+    width:  isApp ? (winBounds.width  || 1080) : 1080,
+    height: isApp ? (winBounds.height || 608)  : 648,
+    x:      isApp ? winBounds.x : undefined,
+    y:      isApp ? winBounds.y : undefined,
+    resizable: isApp,
     titleBarStyle: 'hidden',
     titleBarOverlay: { height: 32, color: '#00000000', symbolColor: '#000000' },
     show: false,
@@ -42,8 +43,10 @@ function createWindow() {
     },
     icon: path.join(__dirname, 'img', 'logo_white.png'),
   });
-  mainWindow.webContents.openDevTools();
-  if (data.position === 1) {
+
+  // mainWindow.webContents.openDevTools();
+  
+  if (isApp) {
     mainWindow.setResizable(true);
     mainWindow.setMinimumSize(800, 500);
     mainWindow.loadFile(path.join(__dirname, 'src', 'app', 'app.html'));
@@ -98,7 +101,7 @@ ipcMain.on('auth:complete', () => {
   writeData({ position: 1 });
   mainWindow?.setResizable(true);
   mainWindow?.setMinimumSize(800, 500);
-  mainWindow?.loadFile(path.join(__dirname, 'src', 'app', 'feed.html'));
+  mainWindow?.loadFile(path.join(__dirname, 'src', 'app', 'app.html'));
 });
 
 app.whenReady().then(createWindow);
