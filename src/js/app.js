@@ -126,7 +126,16 @@
         return;
       }
 
-      window.electronAPI?.authComplete();
+      let tgUser = null;
+      try {
+        const infoRes = await fetch(`${API}/user-info`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username }),
+        });
+        if (infoRes.ok) tgUser = await infoRes.json();
+      } catch {}
+      window.electronAPI?.authComplete(tgUser);
 
     } catch {
       showError(inputCode, 'Нет соединения с сервером');

@@ -486,7 +486,10 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 }
-function getHandle(name) { return '@' + name.toLowerCase().replace(/\s+/g, ''); }
+function getHandle(profile) {
+  const u = profile.username || profile.name || '';
+  return '@' + u.toLowerCase().replace(/\s+/g, '');
+}
 function formatPostTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -587,6 +590,33 @@ function buildPostTextEl(text) {
 }
 
 
+/* ── Server posts cache ─────────────────────── */
+const _serverPostsMap = new Map(); // id → post
+
+function registerServerPost(post) {
+  if (!post.reactions)   post.reactions   = {};
+  if (!post.myReactions) post.myReactions = [];
+  _serverPostsMap.set(post.id, post);
+}
+
+function getPostById(id) {
+  const local = getPosts().find(p => p.id === id);
+  return local || _serverPostsMap.get(id) || null;
+}
+
+function _loadReactions(id) {
+  try { return (JSON.parse(localStorage.getItem('bouston_reactions') || '{}'))[id] || null; }
+  catch { return null; }
+}
+
+function _saveReactions(id, reactions, myReactions) {
+  try {
+    const all = JSON.parse(localStorage.getItem('bouston_reactions') || '{}');
+    all[id] = { reactions, myReactions };
+    localStorage.setItem('bouston_reactions', JSON.stringify(all));
+  } catch {}
+}
+
 /* ── Menu ───────────────────────────────────── */
 let _openMenuId        = null;
 let _menuScrollCleanup = null;
@@ -599,7 +629,7 @@ function closeAllMenus() {
 
 function openPostMenu(id, postEl, scrollContainer, menuItems) {
   closeAllMenus();
-  if (!getPosts().find(p => p.id === id)) return;
+  if (!getPostById(id)) return;
 
   const menu = document.createElement('div');
   menu.className = 'post__menu';
@@ -631,10 +661,11 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
 
 /* ── Shared post actions ────────────────────── */
 function startEditPost(id, postEl, onDone) {
-  const post = getPosts().find(p => p.id === id);
+  const isServer = _serverPostsMap.has(id);
+  const post = isServer ? _serverPostsMap.get(id) : getPosts().find(p => p.id === id);
   if (!post) return;
 
-  const textEl   = postEl.querySelector('.post__text');
+  const textWrap = postEl.querySelector('.post__text-wrap') || postEl.querySelector('.post__text');
   const textarea = document.createElement('textarea');
   textarea.className = 'post__edit-area';
   textarea.value     = post.text;
@@ -651,7 +682,11 @@ function startEditPost(id, postEl, onDone) {
   saveBtn.textContent = 'Сохранить';
 
   actions.append(cancelBtn, saveBtn);
-  textEl.replaceWith(textarea);
+  if (textWrap) {
+    textWrap.replaceWith(textarea);
+  } else {
+    postEl.querySelector('.post__header').after(textarea);
+  }
   textarea.after(actions);
 
   postEl.classList.add('post--verified-tall');
@@ -665,22 +700,49 @@ function startEditPost(id, postEl, onDone) {
   textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
   cancelBtn.addEventListener('click', onDone);
-  saveBtn.addEventListener('click', () => {
+  saveBtn.addEventListener('click', async () => {
     const newText = textarea.value.trim();
     if (!newText) return;
-    const posts = getPosts();
-    const p = posts.find(p => p.id === id);
-    if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
+    saveBtn.disabled = true;
+
+    if (isServer) {
+      const u = window._tgUsername;
+      if (!u) { onDone(); return; }
+      try {
+        const res = await fetch(`${API}/posts/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tg_username: u, text: newText }),
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          _serverPostsMap.set(id, { ..._serverPostsMap.get(id), ...updated });
+        }
+      } catch {}
+    } else {
+      const posts = getPosts();
+      const p = posts.find(p => p.id === id);
+      if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
+    }
     onDone();
   });
 }
 
 function deletePost(id, onDone) {
-  savePosts(getPosts().filter(p => p.id !== id));
+  // Если серверный пост — удаляем на сервере
+  if (_serverPostsMap.has(id)) {
+    const u = window._tgUsername;
+    if (u) {
+      fetch(`${API}/posts/${id}?tg_username=${encodeURIComponent(u)}`, { method: 'DELETE' })
+        .catch(() => {});
+    }
+    _serverPostsMap.delete(id);
+  } else {
+    savePosts(getPosts().filter(p => p.id !== id));
+  }
 
   const el = document.querySelector(`.post[data-post-id="${id}"]`);
   if (el) {
-    // убираем разделитель даты если после него не осталось постов
     const prev = el.previousElementSibling;
     const next = el.nextElementSibling;
     if (prev?.classList.contains('date-separator') &&
@@ -690,11 +752,20 @@ function deletePost(id, onDone) {
     el.remove();
     return;
   }
-
   onDone();
 }
 
 function pinPost(id, onDone) {
+  if (_serverPostsMap.has(id)) {
+    const u = window._tgUsername;
+    if (u) {
+      fetch(`${API}/posts/${id}/pin?tg_username=${encodeURIComponent(u)}`, { method: 'PUT' })
+        .then(r => r.json())
+        .then(() => onDone())
+        .catch(() => onDone());
+    } else { onDone(); }
+    return;
+  }
   const posts = getPosts();
   const post  = posts.find(p => p.id === id);
   if (!post) return;
@@ -784,9 +855,18 @@ function buildReactionsEl(post) {
     .sort((a, b) => (post.reactions[b] || 0) - (post.reactions[a] || 0));
 
   const heartCount = post.reactions['❤️'] || 0;
-  const heartIdx = others.findIndex(e => (post.reactions[e] || 0) <= heartCount);
-  const insertAt = heartIdx === -1 ? others.length : heartIdx;
-  const ordered = [...others.slice(0, insertAt), '❤️', ...others.slice(insertAt)];
+  const totalOthers = others.length;
+  let ordered;
+  if (heartCount > 0) {
+    const heartIdx = others.findIndex(e => (post.reactions[e] || 0) <= heartCount);
+    const insertAt = heartIdx === -1 ? others.length : heartIdx;
+    ordered = [...others.slice(0, insertAt), '❤️', ...others.slice(insertAt)];
+  } else if (totalOthers === 0) {
+    // нет ни одной реакции — показываем пустой лайк
+    ordered = ['❤️'];
+  } else {
+    ordered = others;
+  }
 
   ordered.forEach(emoji => {
     const count = post.reactions[emoji] || 0;
@@ -818,7 +898,55 @@ function reactionLimit() {
   return getProfile().verified ? 3 : 1;
 }
 
-function toggleReaction(id, emoji) {
+async function toggleReaction(id, emoji) {
+  const isServer = _serverPostsMap.has(id);
+
+  if (isServer) {
+    const u = window._tgUsername;
+    if (!u) return;
+    const post = _serverPostsMap.get(id);
+    if (!post) return;
+    migrateReactions(post);
+
+    // optimistic update
+    if (post.myReactions.includes(emoji)) {
+      removeReaction(post, emoji);
+    } else {
+      const existingTypes = Object.keys(post.reactions).filter(e => post.reactions[e] > 0);
+      if (!existingTypes.includes(emoji) && existingTypes.length >= 6) return;
+      // вытесняем ❤️ если добавляем 6-ю уникальную не-❤️
+      const HEART = '❤️';
+      if (!existingTypes.includes(emoji) && existingTypes.length === 5 && emoji !== HEART && existingTypes.includes(HEART)) {
+        delete post.reactions[HEART];
+        post.myReactions = post.myReactions.filter(e => e !== HEART);
+      }
+      if (post.myReactions.length >= reactionLimit()) {
+        removeReaction(post, post.myReactions[0]);
+      }
+      addReaction(post, emoji);
+    }
+    post.liked = post.myReactions.length > 0;
+    post.likes = getTotalReactions(post);
+    syncReactions(id, post);
+
+    try {
+      const res = await fetch(`${API}/posts/${id}/react`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tg_username: u, emoji }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        post.reactions   = data.reactions;
+        post.myReactions = data.myReactions;
+        post.liked = post.myReactions.length > 0;
+        post.likes = getTotalReactions(post);
+        syncReactions(id, post);
+      }
+    } catch {}
+    return;
+  }
+
   const posts = getPosts();
   const post  = posts.find(p => p.id === id);
   if (!post) return;
@@ -859,8 +987,7 @@ const GRID_ROWS = 5;
 
 async function openEmojiMenu(id, likeBtn, scrollContainer) {
   closeEmojiMenu();
-  const posts = getPosts();
-  const post  = posts.find(p => p.id === id);
+  const post = getPostById(id);
   if (!post) return;
   migrateReactions(post);
 
@@ -896,11 +1023,18 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
     });
   }, { root: menu, rootMargin: '60px' });
 
+  const existingTypes = Object.keys(post.reactions).filter(e => post.reactions[e] > 0);
+  const postFull = _serverPostsMap.has(id) && existingTypes.length >= 6;
+
   entries.forEach(({ file, emoji }) => {
+    const isActive  = post.myReactions.includes(emoji);
+    const isBlocked = postFull && !existingTypes.includes(emoji);
+    if (isBlocked) return;
+
     const btn = document.createElement('button');
-    btn.className = 'post__emoji-item' + (post.myReactions.includes(emoji) ? ' post__emoji-item--active' : '');
+    btn.className = 'post__emoji-item' + (isActive ? ' post__emoji-item--active' : '');
     btn.dataset.emoji = emoji;
-    btn.dataset.file = file;
+    btn.dataset.file  = file;
 
     btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -925,6 +1059,16 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
 
 /* ── Build post element ─────────────────────── */
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
+  // Серверный пост: берём автора из самого поста
+  if (post.author) {
+    const a = post.author;
+    profile   = { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
+    avatarSrc = a.avatarUrl || '../../img/default_avatar.png';
+    isVerified = a.isVerified;
+    badgeHtml  = isVerified
+      ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
+      : '';
+  }
   const newlineCount = (post.text ? post.text.match(/\n/g) || [] : []).length;
   const hasImages = post.images && post.images.length > 0;
   const isTall = isVerified && (hasImages || newlineCount >= 2 || (post.text && post.text.length > 150));
@@ -965,21 +1109,23 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
           <span class="post__name">${escapeHtml(profile.name)}</span>
           ${badgeHtml}
         </div>
-        <span class="post__handle">${escapeHtml(getHandle(profile.name))}</span>
+        <span class="post__handle">${escapeHtml(getHandle(profile))}</span>
       </div>
-      <div class="post__more-wrap">
+      ${post.isOwn !== false ? `<div class="post__more-wrap">
         <button class="post__more" data-id="${post.id}">
           <span class="post__more-dot"></span>
           <span class="post__more-dot"></span>
           <span class="post__more-dot"></span>
         </button>
-      </div>
+      </div>` : ''}
     </div>
     ${post.text ? `<div class="post__text-wrap"></div>` : ''}
     ${post.images && post.images.length ? `
     <div class="post__images post__images--${Math.min(post.images.length, 4)}">
       ${post.images.slice(0, 4).map(m => {
-        const item = typeof m === 'string' ? { src: m, type: 'image', mime: '' } : m;
+        const item = typeof m === 'string'
+          ? { src: m, type: /\.(mp4|webm|mov)$/i.test(m) ? 'video' : 'image', mime: '' }
+          : m;
         if (item.type === 'video') {
           return `<div class="post__video-wrap" data-src="${item.src}"></div>`;
         }
@@ -988,11 +1134,13 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
       }).join('')}
     </div>` : ''}
     <div class="post__footer">
-      <div class="post__reactions" data-post-id="${post.id}"></div>
-      <button class="btn-comments" onclick="openThread(${post.id})">
-        <img class="btn-comments__icon" src="../../img/comments.svg" alt="" />
-        ${getComments(post.id).length ? `<span class="btn-comments__count">${getComments(post.id).length}</span>` : ''}
-      </button>
+      <div class="post__reactions-wrap">
+        <div class="post__reactions" data-post-id="${post.id}"></div>
+        <button class="btn-comments" onclick="openThread(${post.id})">
+          <img class="btn-comments__icon" src="../../img/comments.svg" alt="" />
+          ${(() => { const cnt = post.author ? (post.commentCount || 0) : getComments(post.id).length; return cnt ? `<span class="btn-comments__count">${cnt}</span>` : ''; })()}
+        </button>
+      </div>
       <div class="post__time">
         ${post.editedAt ? `<img class="post__time-edit" src="../../img/edit.svg" alt="" />` : ''}
         <span>${formatPostTime(post.createdAt || post.id)}</span>

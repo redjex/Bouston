@@ -1,10 +1,12 @@
 'use strict';
 
+const API = 'https://bouston.xyz';
+
 const POSTS_KEY   = 'bouston_posts';
 const PROFILE_KEY = 'bouston_profile';
 const DEFAULT_PROFILE = {
-  name: 'Bouston', bio: 'Web & UI/UX Designer',
-  avatar: null, banner: null, verified: false,
+  name: 'Bouston', username: '', bio: 'Web & UI/UX Designer',
+  avatar: null, banner: '../../img/baner.png', verified: false,
 };
 
 let _postsCache   = null;

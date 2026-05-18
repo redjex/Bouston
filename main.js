@@ -2,7 +2,8 @@ const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
-const DATA_PATH = path.join(__dirname, 'data.json');
+// userData сохраняется между перезапусками и не затрагивается git/сборками
+const DATA_PATH = path.join(app.getPath('userData'), 'data.json');
 
 function readData() {
   try {
@@ -44,7 +45,7 @@ function createWindow() {
     icon: path.join(__dirname, 'img', 'logo_white.png'),
   });
 
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
   
   if (isApp) {
     mainWindow.setResizable(true);
@@ -72,6 +73,13 @@ function createWindow() {
   if (data.windowMaximized) mainWindow.maximize();
 
   mainWindow.webContents.session.clearCache();
+
+  if (!isApp) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow.webContents.executeJavaScript('localStorage.clear()');
+    });
+  }
+
   mainWindow.once('ready-to-show', () => mainWindow.show());
   setTimeout(() => { if (!mainWindow.isVisible()) mainWindow.show(); }, 2000);
 }
@@ -99,11 +107,16 @@ ipcMain.on('win:set-theme', (_e, theme) => {
   });
 });
 
-ipcMain.on('auth:complete', () => {
-  writeData({ position: 1 });
+ipcMain.on('auth:complete', (_e, tgUser) => {
+  writeData({ position: 1, tgUser: tgUser || null });
   mainWindow?.setResizable(true);
   mainWindow?.setMinimumSize(800, 500);
   mainWindow?.loadFile(path.join(__dirname, 'src', 'app', 'app.html'));
+});
+
+ipcMain.handle('user:get-tg', () => {
+  const d = readData();
+  return d.tgUser || null;
 });
 
 app.whenReady().then(createWindow);

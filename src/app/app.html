@@ -69,6 +69,7 @@
               <span class="profile-card__name" id="profile-name">Bouston</span>
               <img class="profile-card__verified" id="profile-verified-badge" src="../../img/verided.svg" alt="verified" style="display:none" />
             </div>
+            <span class="profile-card__username" id="profile-username"></span>
             <span class="profile-card__bio" id="profile-bio">Web &amp; UI/UX Designer</span>
           </div>
         </div>
@@ -124,15 +125,12 @@
             <input id="input-name" type="text" placeholder="Ваше имя" />
           </div>
           <div class="edit-field">
+            <label>Юзернейм</label>
+            <input id="input-username-profile" type="text" placeholder="@username" maxlength="21" />
+          </div>
+          <div class="edit-field">
             <label>Описание</label>
             <input id="input-bio" type="text" placeholder="Web &amp; UI/UX Designer" />
-          </div>
-          <div class="edit-field edit-field--toggle">
-            <label for="toggle-verified">Верификация</label>
-            <label class="toggle">
-              <input type="checkbox" id="toggle-verified" />
-              <span class="toggle__track"><span class="toggle__thumb"></span></span>
-            </label>
           </div>
         </div>
         <div class="edit-modal__footer">

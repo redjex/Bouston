@@ -42,5 +42,51 @@ _scrollTopBtn.addEventListener('click', () => {
 document.addEventListener('click', closeAllMenus);
 
 /* ── Init ────────────────────────────────────── */
-renderFeedComposeAvatar();
-renderFeedPosts();
+window._tgUsername = null;
+
+async function initTgProfile() {
+  try {
+    const tgUser = await window.electronAPI?.getTgUser();
+    if (!tgUser) return;
+
+    // _tgUsername нужен всегда — устанавливаем до любых ранних выходов
+    window._tgUsername = tgUser.username || null;
+
+    const p = getProfile();
+    if (p.tgSynced) return;
+
+    if (tgUser.first_name) {
+      p.name = tgUser.last_name
+        ? tgUser.first_name + ' ' + tgUser.last_name
+        : tgUser.first_name;
+    }
+    if (tgUser.profile_username) p.username = tgUser.profile_username;
+    else if (tgUser.username) p.username = tgUser.username;
+    if (tgUser.bio) p.bio = tgUser.bio;
+    if (tgUser.verified) p.verified = true;
+    if (tgUser.avatar_b64) {
+      p.avatar = tgUser.avatar_b64;
+    } else {
+      const resp = await fetch('../../img/default_avatar.png');
+      const blob = await resp.blob();
+      p.avatar = await new Promise(res => {
+        const r = new FileReader();
+        r.onload = e => res(e.target.result);
+        r.readAsDataURL(blob);
+      });
+    }
+    p.tgSynced = true;
+    saveProfile(p);
+
+    const avatarSrc = p.avatar || '../../img/default_avatar.png';
+    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar', 'profile-avatar'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.src = avatarSrc;
+    });
+  } catch {}
+}
+
+initTgProfile().finally(() => {
+  renderFeedComposeAvatar();
+  renderFeedPosts();
+});
