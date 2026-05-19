@@ -44,6 +44,18 @@ document.addEventListener('click', closeAllMenus);
 /* ── Init ────────────────────────────────────── */
 window._tgUsername = null;
 
+async function checkAuth() {
+  const token = await window.electronAPI?.getAuthToken();
+  if (!token) { window.electronAPI?.logout(); return false; }
+  try {
+    const res = await fetch(`${API}/posts?limit=1`, {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (res.status === 401) { window.electronAPI?.logout(); return false; }
+  } catch {}
+  return true;
+}
+
 async function initTgProfile() {
   try {
     const tgUser = await window.electronAPI?.getTgUser();
@@ -86,7 +98,10 @@ async function initTgProfile() {
   } catch {}
 }
 
-initTgProfile().finally(() => {
-  renderFeedComposeAvatar();
-  renderFeedPosts();
+checkAuth().then(ok => {
+  if (!ok) return;
+  initTgProfile().finally(() => {
+    renderFeedComposeAvatar();
+    renderFeedPosts();
+  });
 });

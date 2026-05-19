@@ -127,8 +127,8 @@ function buildCommentEl(c, isServer) {
     deleteBtn.addEventListener('click', async () => {
       if (isServer) {
         const u = window._tgUsername || '';
-        await fetch(
-          `${API}/posts/${_threadPostId}/comments/${c.id}?tg_username=${encodeURIComponent(u)}`,
+        await apiFetch(
+          `${API}/posts/${_threadPostId}/comments/${c.id}`,
           { method: 'DELETE' }
         ).catch(() => {});
         await renderComments();
@@ -145,10 +145,9 @@ function buildCommentEl(c, isServer) {
     if (isServer) {
       const u = window._tgUsername || '';
       try {
-        const res = await fetch(`${API}/posts/${_threadPostId}/comments/${c.id}/like`, {
+        const res = await apiFetch(`${API}/posts/${_threadPostId}/comments/${c.id}/like`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tg_username: u }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -228,7 +227,7 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
     const u = window._tgUsername;
     if (!u) { btn.disabled = false; return; }
     try {
-      const res = await fetch(`${API}/posts/${_threadPostId}/comments`, {
+      const res = await apiFetch(`${API}/posts/${_threadPostId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tg_username: u, text }),

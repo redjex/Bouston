@@ -126,6 +126,9 @@
         return;
       }
 
+      const verifyData = await res.json();
+      const authToken  = verifyData.token || null;
+
       let tgUser = null;
       try {
         const infoRes = await fetch(`${API}/user-info`, {
@@ -135,7 +138,7 @@
         });
         if (infoRes.ok) tgUser = await infoRes.json();
       } catch {}
-      window.electronAPI?.authComplete(tgUser);
+      window.electronAPI?.authComplete({ ...(tgUser || {}), token: authToken });
 
     } catch {
       showError(inputCode, 'Нет соединения с сервером');

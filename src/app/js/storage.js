@@ -2,6 +2,19 @@
 
 const API = 'https://bouston.xyz';
 
+async function apiFetch(url, options = {}) {
+  const token = await window.electronAPI?.getAuthToken();
+  if (token) {
+    options.headers = { ...options.headers, 'Authorization': 'Bearer ' + token };
+  }
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    window.electronAPI?.logout();
+    throw new Error('unauthorized');
+  }
+  return res;
+}
+
 const POSTS_KEY   = 'bouston_posts';
 const PROFILE_KEY = 'bouston_profile';
 const DEFAULT_PROFILE = {

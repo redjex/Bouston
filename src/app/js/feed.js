@@ -119,7 +119,7 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     const u = window._tgUsername;
     if (!u) throw new Error('not logged in');
 
-    const res = await fetch(`${API}/posts`, {
+    const res = await apiFetch(`${API}/posts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -128,13 +128,14 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
         images: images.map(m => m.src),
       }),
     });
-    if (!res.ok) throw new Error('server error');
+    if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
 
     clearComposeInput('feed-compose-input');
     clearComposeImages('feed');
     renderFeedPosts();
   } catch (err) {
-    console.error('Post failed:', err);
+    if (err.message !== 'unauthorized') alert(err.message);
   } finally {
     btn.disabled = false;
   }

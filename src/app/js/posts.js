@@ -108,6 +108,8 @@
 
   let scale = 1, tx = 0, ty = 0, rotation = 0, flipH = 1, flipV = 1;
   let _isVideo = false;
+  let _lbItems = [];   // [{src, isVideo}] — все медиа текущего поста
+  let _lbIndex = 0;   // текущий индекс
 
   function activeEl() { return _isVideo ? lbVideo : lbImg; }
 
@@ -122,7 +124,9 @@
     lbVideo.style.transform = '';
   }
 
-  function openLightbox(src, isVideo) {
+  function openLightbox(src, isVideo, items, index) {
+    _lbItems = items || [];
+    _lbIndex = index ?? 0;
     resetTransform();
     _isVideo = !!isVideo;
     if (_isVideo) {
@@ -158,6 +162,15 @@
     lb.style.paddingBottom = '';
     resetTransform();
     _isVideo = false;
+    _lbItems = [];
+    _lbIndex = 0;
+  }
+
+  function lbGoTo(idx) {
+    if (!_lbItems.length) return;
+    _lbIndex = (idx + _lbItems.length) % _lbItems.length;
+    const item = _lbItems[_lbIndex];
+    openLightbox(item.src, item.isVideo, _lbItems, _lbIndex);
   }
 
   function saveMedia() {
@@ -186,12 +199,33 @@
     a.click();
   }
 
+  function collectPostItems(clickedEl) {
+    const postEl = clickedEl.closest('.post');
+    if (!postEl) return { items: [], index: 0 };
+    const items = [];
+    postEl.querySelectorAll('.post__images .post__image, .post__images .post__video').forEach(el => {
+      const isVideo = el.classList.contains('post__video') || el.classList.contains('vplayer');
+      items.push({ src: isVideo ? el.dataset.src : el.src, isVideo });
+    });
+    const clickedSrc = clickedEl.dataset.src || clickedEl.src;
+    const index = items.findIndex(it => it.src === clickedSrc);
+    return { items, index: index === -1 ? 0 : index };
+  }
+
   document.addEventListener('click', e => {
     if (e.target.closest('.lightbox__close') || e.target.closest('.lightbox__tool')) return;
     const vidWrap = e.target.closest('.post__video');
-    if (vidWrap) { openLightbox(vidWrap.dataset.src, true); return; }
+    if (vidWrap) {
+      const { items, index } = collectPostItems(vidWrap);
+      openLightbox(vidWrap.dataset.src, true, items, index);
+      return;
+    }
     const img = e.target.closest('.post__image:not(.post__video)');
-    if (img) { openLightbox(img.src, false); return; }
+    if (img) {
+      const { items, index } = collectPostItems(img);
+      openLightbox(img.src, false, items, index);
+      return;
+    }
     if (lb.style.display !== 'none' && e.target === lb) closeLightbox();
   });
 
@@ -203,7 +237,10 @@
   document.getElementById('lb-save')      .addEventListener('click', saveMedia);
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeLightbox();
+    if (lb.style.display === 'none') return;
+    if (e.key === 'Escape') { closeLightbox(); return; }
+    if (e.key === 'ArrowLeft')  { lbGoTo(_lbIndex - 1); return; }
+    if (e.key === 'ArrowRight') { lbGoTo(_lbIndex + 1); return; }
   });
 
   lb.addEventListener('wheel', e => {
@@ -709,7 +746,7 @@ function startEditPost(id, postEl, onDone) {
       const u = window._tgUsername;
       if (!u) { onDone(); return; }
       try {
-        const res = await fetch(`${API}/posts/${id}`, {
+        const res = await apiFetch(`${API}/posts/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tg_username: u, text: newText }),
@@ -733,7 +770,7 @@ function deletePost(id, onDone) {
   if (_serverPostsMap.has(id)) {
     const u = window._tgUsername;
     if (u) {
-      fetch(`${API}/posts/${id}?tg_username=${encodeURIComponent(u)}`, { method: 'DELETE' })
+      apiFetch(`${API}/posts/${id}`, { method: 'DELETE' })
         .catch(() => {});
     }
     _serverPostsMap.delete(id);
@@ -759,7 +796,7 @@ function pinPost(id, onDone) {
   if (_serverPostsMap.has(id)) {
     const u = window._tgUsername;
     if (u) {
-      fetch(`${API}/posts/${id}/pin?tg_username=${encodeURIComponent(u)}`, { method: 'PUT' })
+      apiFetch(`${API}/posts/${id}/pin`, { method: 'PUT' })
         .then(r => r.json())
         .then(() => onDone())
         .catch(() => onDone());
@@ -930,7 +967,7 @@ async function toggleReaction(id, emoji) {
     syncReactions(id, post);
 
     try {
-      const res = await fetch(`${API}/posts/${id}/react`, {
+      const res = await apiFetch(`${API}/posts/${id}/react`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tg_username: u, emoji }),

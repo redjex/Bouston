@@ -23,7 +23,7 @@ function createWindow() {
   Menu.setApplicationMenu(null);
 
   const data = readData();
-  const isApp = data.position === 1;
+  const isApp = data.position === 1 && !!data.authToken;
   const winBounds = isApp ? (data.windowBounds || {}) : {};
 
   mainWindow = new BrowserWindow({
@@ -45,7 +45,7 @@ function createWindow() {
     icon: path.join(__dirname, 'img', 'logo_white.png'),
   });
 
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
   
   if (isApp) {
     mainWindow.setResizable(true);
@@ -107,8 +107,9 @@ ipcMain.on('win:set-theme', (_e, theme) => {
   });
 });
 
-ipcMain.on('auth:complete', (_e, tgUser) => {
-  writeData({ position: 1, tgUser: tgUser || null });
+ipcMain.on('auth:complete', (_e, data) => {
+  const { token, ...tgUser } = data || {};
+  writeData({ position: 1, tgUser: tgUser || null, authToken: token || null });
   mainWindow?.setResizable(true);
   mainWindow?.setMinimumSize(800, 500);
   mainWindow?.loadFile(path.join(__dirname, 'src', 'app', 'app.html'));
@@ -117,6 +118,21 @@ ipcMain.on('auth:complete', (_e, tgUser) => {
 ipcMain.handle('user:get-tg', () => {
   const d = readData();
   return d.tgUser || null;
+});
+
+ipcMain.handle('auth:get-token', () => {
+  const d = readData();
+  return d.authToken || null;
+});
+
+ipcMain.on('auth:logout', () => {
+  writeData({ position: 0 });
+  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+  mainWindow?.setResizable(false);
+  mainWindow?.setMinimumSize(0, 0);
+  mainWindow?.setSize(1250, 720);
+  mainWindow?.center();
+  mainWindow?.loadFile(path.join(__dirname, 'src', 'index.html'));
 });
 
 app.whenReady().then(createWindow);

@@ -201,6 +201,11 @@ function clearFieldError(inputId) {
 document.getElementById('btn-banner-settings').addEventListener('click', openModal);
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 
+document.getElementById('btn-logout').addEventListener('click', () => {
+  closeModal();
+  window.electronAPI?.logout();
+});
+
 document.getElementById('input-username-profile').addEventListener('input', function () {
   let val = this.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
   if (!val) { this.value = ''; return; }
@@ -261,7 +266,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   try {
     const tgUser = await window.electronAPI?.getTgUser();
     if (tgUser?.username) {
-      await fetch('https://bouston.xyz/profile', {
+      await apiFetch('https://bouston.xyz/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -288,7 +293,7 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     const u = window._tgUsername;
     if (!u) throw new Error('not logged in');
 
-    const res = await fetch(`${API}/posts`, {
+    const res = await apiFetch(`${API}/posts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -297,13 +302,14 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
         images: images.map(m => m.src),
       }),
     });
-    if (!res.ok) throw new Error('server error');
+    if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
 
     clearComposeInput('profile-compose-input');
     clearComposeImages('profile');
     renderProfilePosts();
   } catch (err) {
-    console.error('Post failed:', err);
+    if (err.message !== 'unauthorized') alert(err.message);
   } finally {
     btn.disabled = false;
   }

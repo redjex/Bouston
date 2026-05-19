@@ -4,8 +4,8 @@ import io
 import json
 import logging
 import os
-import random
 import re as _re
+import secrets
 import sqlite3
 import string
 import time
@@ -13,17 +13,26 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import jwt
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
+from aiogram.types import FSInputFile
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 load_dotenv()
 
 BOT_TOKEN  = os.getenv("BOT_TOKEN")
 ADMIN_IDS  = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()}
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+JWT_ALGO   = "HS256"
+JWT_TTL    = 86400 * 30  # 30 дней
+
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET не задан в .env — сервер не запустится без него")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -37,6 +46,8 @@ BASE_DIR  = Path(__file__).parent
 IMG_DIR       = BASE_DIR / "img"
 POSTS_IMG_DIR = IMG_DIR / "posts"
 DB_PATH       = BASE_DIR / "bouston.db"
+BANER_PATH    = BASE_DIR / "baner.png"
+CODE_PATH     = BASE_DIR / "code.png"
 
 IMG_DIR.mkdir(exist_ok=True)
 POSTS_IMG_DIR.mkdir(exist_ok=True)
@@ -232,7 +243,24 @@ def get_ip(request: Request) -> str:
 
 
 def generate_code(length: int = 6) -> str:
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+_bearer = HTTPBearer()
+
+
+def require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> str:
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGO])
+        username: str = payload.get("sub", "")
+        if not username:
+            raise HTTPException(401, "Недействительный токен")
+        return username
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Токен истёк, войдите снова")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Недействительный токен")
 
 
 def normalize(username: str) -> str:
@@ -287,11 +315,22 @@ async def cmd_start(message: types.Message):
     )
     log.info("User upserted: %s (id=%s)", username, tg_user.id)
 
-    await message.answer(
-        f"Привет, @{tg_user.username}! 👋\n"
-        "Теперь ты можешь авторизоваться в Bouston.\n"
-        "Введи свой username в приложении и получи код подтверждения."
+    caption = (
+        f"Привет, @{tg_user.username} "
+        f'<tg-emoji emoji-id="5296372434692234934">❤️</tg-emoji>\n\n'
+        f"Рады видеть тебя для регистрации в Bouston. "
+        f"Введи в приложении свой юзернейм из телеграм и получи код для входа "
+        f'<tg-emoji emoji-id="5460980668378931880">👋</tg-emoji>'
     )
+    try:
+        await bot.send_photo(
+            message.chat.id,
+            FSInputFile(BANER_PATH),
+            caption=caption,
+            parse_mode="HTML",
+        )
+    except Exception:
+        await message.answer(caption, parse_mode="HTML")
 
 
 @dp.message(Command("verif"))
@@ -410,12 +449,18 @@ async def send_code(body: SendCodeRequest, request: Request):
     code                      = generate_code()
     pending_codes[username]   = {"code": code, "expires_at": time.time() + CODE_TTL, "ip": ip}
 
+    code_caption = (
+        f'<tg-emoji emoji-id="5301173701323028420">🔐</tg-emoji> '
+        f"Твой код для входа в Bouston:\n\n"
+        f"<b>{code}</b>\n\n"
+        f"Код действует 5 минут. Никому не сообщай его. "
+        f'<tg-emoji emoji-id="5296482716567495148">🤫</tg-emoji>'
+    )
     try:
-        await bot.send_message(
+        await bot.send_photo(
             user["chat_id"],
-            f"🔐 Твой код для входа в Bouston:\n\n"
-            f"<b>{code}</b>\n\n"
-            f"Код действует 5 минут. Никому не сообщай его.",
+            FSInputFile(CODE_PATH),
+            caption=code_caption,
             parse_mode="HTML",
         )
     except Exception as e:
@@ -453,7 +498,13 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
     register_success(ip_blocks, ip)
     last_send.pop(username, None)
     ip_active_username.pop(ip, None)
-    return {"ok": True}
+
+    token = jwt.encode(
+        {"sub": username, "exp": int(time.time()) + JWT_TTL},
+        JWT_SECRET,
+        algorithm=JWT_ALGO,
+    )
+    return {"ok": True, "token": token}
 
 
 @app.post("/user-info")
@@ -502,7 +553,14 @@ async def get_user_info(body: UserInfoRequest):
     }
 
 
-USERNAME_RE = _re.compile(r'^[a-zA-Z0-9_.]{3,20}$')
+USERNAME_RE    = _re.compile(r'^[a-zA-Z0-9_.]{3,20}$')
+
+MAX_POST_TEXT    = 5_000
+MAX_COMMENT_TEXT = 2_000
+MAX_BIO_LEN      = 300
+MAX_NAME_LEN     = 60
+MAX_IMAGES       = 10
+MAX_LIMIT        = 100
 
 
 class UpdateProfileRequest(BaseModel):
@@ -513,11 +571,16 @@ class UpdateProfileRequest(BaseModel):
 
 
 @app.put("/profile")
-async def update_profile(body: UpdateProfileRequest):
-    tg_username = normalize(body.tg_username)
+async def update_profile(body: UpdateProfileRequest, username: str = Depends(require_auth)):
+    tg_username = username
     user        = db_get_user(tg_username)
     if not user:
         raise HTTPException(404, "Пользователь не найден")
+
+    if body.display_name is not None and len(body.display_name) > MAX_NAME_LEN:
+        raise HTTPException(400, f"Имя не может быть длиннее {MAX_NAME_LEN} символов")
+    if body.bio is not None and len(body.bio) > MAX_BIO_LEN:
+        raise HTTPException(400, f"Bio не может быть длиннее {MAX_BIO_LEN} символов")
 
     if body.profile_username is not None:
         u = body.profile_username.strip().lstrip("@")
@@ -598,6 +661,8 @@ POSTS_QUERY = """
 
 @app.get("/posts")
 async def get_posts(viewer: str = "", author: str = "", page: int = 1, limit: int = 20):
+    page   = max(1, page)
+    limit  = max(1, min(limit, MAX_LIMIT))
     viewer = normalize(viewer) if viewer else ""
     offset = (page - 1) * limit
     with get_db() as conn:
@@ -621,8 +686,12 @@ class CreatePostRequest(BaseModel):
 
 
 @app.post("/posts")
-async def create_post(body: CreatePostRequest):
-    username = normalize(body.tg_username)
+async def create_post(body: CreatePostRequest, username: str = Depends(require_auth)):
+    if len(body.text) > MAX_POST_TEXT:
+        raise HTTPException(400, f"Текст не может быть длиннее {MAX_POST_TEXT} символов")
+    if len(body.images) > MAX_IMAGES:
+        raise HTTPException(400, f"Максимум {MAX_IMAGES} изображений на пост")
+
     user = db_get_user(username)
     if not user:
         raise HTTPException(404, "Пользователь не найден")
@@ -666,11 +735,12 @@ class EditPostRequest(BaseModel):
 
 
 @app.put("/posts/{post_id}")
-async def edit_post_endpoint(post_id: int, body: EditPostRequest):
-    username = normalize(body.tg_username)
+async def edit_post_endpoint(post_id: int, body: EditPostRequest, username: str = Depends(require_auth)):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Текст не может быть пустым")
+    if len(text) > MAX_POST_TEXT:
+        raise HTTPException(400, f"Текст не может быть длиннее {MAX_POST_TEXT} символов")
     with get_db() as conn:
         row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
         if not row:
@@ -687,8 +757,7 @@ async def edit_post_endpoint(post_id: int, body: EditPostRequest):
 
 
 @app.delete("/posts/{post_id}")
-async def delete_post_endpoint(post_id: int, tg_username: str):
-    username = normalize(tg_username)
+async def delete_post_endpoint(post_id: int, username: str = Depends(require_auth)):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
         if not row:
@@ -704,8 +773,7 @@ async def delete_post_endpoint(post_id: int, tg_username: str):
 
 
 @app.put("/posts/{post_id}/pin")
-async def pin_post_endpoint(post_id: int, tg_username: str):
-    username = normalize(tg_username)
+async def pin_post_endpoint(post_id: int, username: str = Depends(require_auth)):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
         if not row:
@@ -727,8 +795,7 @@ class ReactRequest(BaseModel):
 
 
 @app.post("/posts/{post_id}/react")
-async def react_to_post(post_id: int, body: ReactRequest):
-    username = normalize(body.tg_username)
+async def react_to_post(post_id: int, body: ReactRequest, username: str = Depends(require_auth)):
     emoji    = body.emoji.strip()
     if not emoji:
         raise HTTPException(400, "emoji обязателен")
@@ -862,11 +929,12 @@ class CreateCommentRequest(BaseModel):
 
 
 @app.post("/posts/{post_id}/comments")
-async def create_comment(post_id: int, body: CreateCommentRequest):
-    username = normalize(body.tg_username)
+async def create_comment(post_id: int, body: CreateCommentRequest, username: str = Depends(require_auth)):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Текст не может быть пустым")
+    if len(text) > MAX_COMMENT_TEXT:
+        raise HTTPException(400, f"Комментарий не может быть длиннее {MAX_COMMENT_TEXT} символов")
     user = db_get_user(username)
     if not user:
         raise HTTPException(404, "Пользователь не найден")
@@ -885,8 +953,7 @@ async def create_comment(post_id: int, body: CreateCommentRequest):
 
 
 @app.delete("/posts/{post_id}/comments/{comment_id}")
-async def delete_comment_endpoint(post_id: int, comment_id: int, tg_username: str):
-    username = normalize(tg_username)
+async def delete_comment_endpoint(post_id: int, comment_id: int, username: str = Depends(require_auth)):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM comments WHERE id = ? AND post_id = ?", (comment_id, post_id)).fetchone()
         if not row:
@@ -898,13 +965,8 @@ async def delete_comment_endpoint(post_id: int, comment_id: int, tg_username: st
     return {"ok": True}
 
 
-class LikeCommentRequest(BaseModel):
-    tg_username: str
-
-
 @app.post("/posts/{post_id}/comments/{comment_id}/like")
-async def like_comment(post_id: int, comment_id: int, body: LikeCommentRequest):
-    username = normalize(body.tg_username)
+async def like_comment(post_id: int, comment_id: int, username: str = Depends(require_auth)):
     user = db_get_user(username)
     if not user:
         raise HTTPException(404, "Пользователь не найден")
