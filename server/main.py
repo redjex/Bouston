@@ -612,6 +612,16 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
             raise HTTPException(400, "Юзернейм: от 3 до 20 символов, только буквы, цифры, _ и .")
         body.profile_username = u or None
 
+        # Проверяем уникальность: никто другой не должен использовать этот юзернейм
+        if body.profile_username:
+            with get_db() as conn:
+                taken = conn.execute(
+                    "SELECT 1 FROM users WHERE profile_username = ? AND username != ?",
+                    (body.profile_username, tg_username),
+                ).fetchone()
+            if taken:
+                raise HTTPException(400, "Этот юзернейм уже занят")
+
     now = time.time()
 
     # Сохраняем аватарку если передана
