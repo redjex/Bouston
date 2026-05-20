@@ -2,6 +2,9 @@ const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
+app.commandLine.appendSwitch('enable-smooth-scrolling');
+app.commandLine.appendSwitch('enable-features', 'SmoothScrolling');
+
 // userData сохраняется между перезапусками и не затрагивается git/сборками
 const DATA_PATH = path.join(app.getPath('userData'), 'data.json');
 
@@ -33,7 +36,7 @@ function createWindow() {
     y:      isApp ? winBounds.y : undefined,
     resizable: isApp,
     titleBarStyle: 'hidden',
-    titleBarOverlay: { height: 32, color: '#00000000', symbolColor: '#000000' },
+    titleBarOverlay: { height: 32, color: '#00000000', symbolColor: '#ffffff' },
     show: false,
     backgroundColor: '#ffffff',
     webPreferences: {
@@ -97,12 +100,12 @@ ipcMain.on('win:minimize', () => mainWindow?.minimize());
 ipcMain.on('win:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
 ipcMain.on('win:close',    () => mainWindow?.close());
 
-const overlaySymbol = { light: '#000000', dark: '#ffffff' };
+const overlaySymbol = { light: '#ffffff', dark: '#ffffff' };
 
 ipcMain.on('win:set-theme', (_e, theme) => {
   mainWindow?.setTitleBarOverlay({
     color:       '#00000000',
-    symbolColor: overlaySymbol[theme] ?? '#000000',
+    symbolColor: overlaySymbol[theme] ?? '#ffffff',
     height:      32,
   });
 });

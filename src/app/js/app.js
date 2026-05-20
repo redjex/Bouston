@@ -27,12 +27,16 @@ document.getElementById('nav-profile').addEventListener('click', () => showView(
 const _scrollTopBtn = document.getElementById('btn-scroll-top');
 
 _feedEl.addEventListener('scroll', () => {
-  if (_currentView === 'feed')
+  if (_currentView === 'feed') {
     _scrollTopBtn.classList.toggle('visible', _feedEl.scrollTop > 300);
+    document.getElementById('view-feed').classList.toggle('view--scrolled', _feedEl.scrollTop > 10);
+  }
 });
 _profileWrap.addEventListener('scroll', () => {
-  if (_currentView === 'profile')
+  if (_currentView === 'profile') {
     _scrollTopBtn.classList.toggle('visible', _profileWrap.scrollTop > 300);
+    document.getElementById('view-profile').classList.toggle('view--scrolled', _profileWrap.scrollTop > 10);
+  }
 });
 _scrollTopBtn.addEventListener('click', () => {
   (_currentView === 'feed' ? _feedEl : _profileWrap).scrollTo({ top: 0, behavior: 'smooth' });

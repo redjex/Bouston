@@ -134,12 +134,22 @@
           </div>
         </div>
         <div class="edit-modal__footer">
-          <button class="btn-logout" id="btn-logout">Выйти</button>
           <button class="btn-save" id="btn-save">Сохранить</button>
+          <button class="btn-logout" id="btn-logout">Выйти</button>
         </div>
       </div>
     </div>
 
+  </div>
+
+  <!-- ══ Confirm logout ════════════════════════ -->
+  <div class="confirm-overlay" id="confirm-logout-overlay" hidden>
+    <div class="confirm-box">
+      <span class="confirm-box__title">Выйти?</span>
+      <span class="confirm-box__sub">Вы уверены, что хотите выйти из аккаунта?</span>
+      <button class="confirm-box__btn confirm-box__btn--yes" id="confirm-logout-yes">Выйти</button>
+      <button class="confirm-box__btn confirm-box__btn--no" id="confirm-logout-no">Отмена</button>
+    </div>
   </div>
 
   <!-- ══ Thread panel ══════════════════════════ -->

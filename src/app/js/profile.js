@@ -202,6 +202,15 @@ document.getElementById('btn-banner-settings').addEventListener('click', openMod
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 
 document.getElementById('btn-logout').addEventListener('click', () => {
+  document.getElementById('confirm-logout-overlay').removeAttribute('hidden');
+});
+
+document.getElementById('confirm-logout-no').addEventListener('click', () => {
+  document.getElementById('confirm-logout-overlay').setAttribute('hidden', '');
+});
+
+document.getElementById('confirm-logout-yes').addEventListener('click', () => {
+  document.getElementById('confirm-logout-overlay').setAttribute('hidden', '');
   closeModal();
   window.electronAPI?.logout();
 });
@@ -263,10 +272,20 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   renderProfile();
   refreshPostsVerifiedState(p.verified);
 
-  // Мгновенно обновляем аватарки на своих постах в DOM
-  if (newAvatar !== undefined && window._tgUsername) {
-    document.querySelectorAll(`[data-author="${window._tgUsername}"] .avatar`).forEach(img => {
-      img.src = newAvatar;
+  if (window._tgUsername) {
+    // Мгновенно обновляем аватарки на своих постах и комментариях
+    if (newAvatar !== undefined) {
+      document.querySelectorAll(`[data-author="${window._tgUsername}"] .avatar`).forEach(img => {
+        img.src = newAvatar;
+      });
+    }
+
+    // Мгновенно обновляем имя на своих постах и комментариях
+    document.querySelectorAll(`[data-author="${window._tgUsername}"] .post__name`).forEach(el => {
+      el.textContent = p.name;
+    });
+    document.querySelectorAll(`[data-author="${window._tgUsername}"] .comment__name`).forEach(el => {
+      el.textContent = p.name;
     });
   }
 

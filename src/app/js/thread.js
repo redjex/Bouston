@@ -139,9 +139,11 @@ function buildCommentEl(c, isServer) {
   row.appendChild(el);
 
   // Для своих комментариев используем локальный профиль — он всегда актуален
+  const _lp       = c.isOwn ? getProfile() : null;
   const avatarSrc = c.isOwn
-    ? (getProfile().avatar || c.author.avatarUrl || '../../img/default_avatar.png')
+    ? (_lp.avatar || c.author.avatarUrl || '../../img/default_avatar.png')
     : (c.author.avatarUrl || '../../img/default_avatar.png');
+  const displayName = c.isOwn ? _lp.name : c.author.displayName;
   const badgeHtml = c.author.isVerified
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
     : '';
@@ -150,7 +152,7 @@ function buildCommentEl(c, isServer) {
     <img class="avatar" src="${avatarSrc}" alt="" />
     <div class="comment__body">
       <div class="comment__namerow">
-        <span class="comment__name">${escapeHtml(c.author.displayName)}</span>
+        <span class="comment__name">${escapeHtml(displayName)}</span>
         ${badgeHtml}
         ${c.isOwn ? `<button class="comment__menu-btn" aria-label="Меню"><span></span><span></span><span></span></button>` : ''}
       </div>

@@ -1098,11 +1098,15 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
   // Серверный пост: берём автора из самого поста
   if (post.author) {
-    const a = post.author;
-    profile   = { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
-    // Для своих постов используем локальный профиль — он актуален сразу после смены аватарки
-    avatarSrc  = post.isOwn
-      ? (getProfile().avatar || a.avatarUrl || '../../img/default_avatar.png')
+    const a   = post.author;
+    const own = post.isOwn;
+    const lp  = own ? getProfile() : null;
+    // Для своих постов используем локальный профиль — он актуален сразу после изменений
+    profile    = own
+      ? { name: lp.name, username: lp.username || a.profileUsername, verified: a.isVerified }
+      : { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
+    avatarSrc  = own
+      ? (lp.avatar || a.avatarUrl || '../../img/default_avatar.png')
       : (a.avatarUrl || '../../img/default_avatar.png');
     isVerified = a.isVerified;
     badgeHtml  = isVerified
