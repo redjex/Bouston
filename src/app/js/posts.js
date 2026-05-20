@@ -787,7 +787,7 @@ function startEditPost(id, postEl, onDone) {
         const res = await apiFetch(`${API}/posts/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tg_username: u, text: newText }),
+          body: JSON.stringify({ text: newText }),
         });
         if (res.ok) {
           const updated = await res.json();
@@ -1017,7 +1017,7 @@ async function toggleReaction(id, emoji) {
       const res = await apiFetch(`${API}/posts/${id}/react`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tg_username: u, emoji }),
+        body: JSON.stringify({ emoji }),
       });
       if (res.ok) {
         const data = await res.json();

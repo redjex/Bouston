@@ -105,7 +105,7 @@ async function renderProfilePosts() {
 
   let posts;
   try {
-    const res = await fetch(`${API}/posts?viewer=${encodeURIComponent(u)}&author=${encodeURIComponent(u)}&limit=100`);
+    const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(u)}&limit=100`);
     if (!res.ok) throw new Error();
     posts = await res.json();
   } catch {
@@ -372,7 +372,6 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tg_username: u,
         text,
         images: images.map(m => m.src),
       }),

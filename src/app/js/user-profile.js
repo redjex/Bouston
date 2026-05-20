@@ -45,12 +45,10 @@ async function openUserProfile(tgUsername) {
 
   showView('user-profile');
 
-  const viewer = window._tgUsername || '';
-
   // Посты — основной запрос (быстрый)
   let posts = [];
   try {
-    const res = await fetch(`${API}/posts?viewer=${encodeURIComponent(viewer)}&author=${encodeURIComponent(tgUsername)}&limit=100`);
+    const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(tgUsername)}&limit=100`);
     if (res.ok) posts = await res.json();
   } catch {}
 

@@ -846,10 +846,24 @@ POSTS_QUERY = """
 
 
 @app.get("/posts")
-async def get_posts(viewer: str = "", author: str = "", page: int = 1, limit: int = 20):
+async def get_posts(
+    author: str = "",
+    page: int = 1,
+    limit: int = 20,
+    request: Request = None,
+):
+    # viewer определяем из токена (если передан), иначе анонимно
+    viewer = ""
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    if auth_header.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
+            viewer = payload.get("sub", "")
+        except jwt.PyJWTError:
+            pass
+
     page   = max(1, page)
     limit  = max(1, min(limit, MAX_LIMIT))
-    viewer = normalize(viewer) if viewer else ""
     offset = (page - 1) * limit
     with get_db() as conn:
         if author:
@@ -866,9 +880,8 @@ async def get_posts(viewer: str = "", author: str = "", page: int = 1, limit: in
 
 
 class CreatePostRequest(BaseModel):
-    tg_username: str
-    text:        str       = ""
-    images:      list[str] = []
+    text:   str       = ""
+    images: list[str] = []
 
 
 @app.post("/posts")
@@ -920,7 +933,6 @@ async def create_post(body: CreatePostRequest, username: str = Depends(require_a
 
 
 class EditPostRequest(BaseModel):
-    tg_username: str
     text: str
 
 
@@ -980,8 +992,7 @@ async def pin_post_endpoint(post_id: int, username: str = Depends(require_auth))
 
 
 class ReactRequest(BaseModel):
-    tg_username: str
-    emoji:       str
+    emoji: str
 
 
 @app.post("/posts/{post_id}/react")
@@ -1106,8 +1117,15 @@ def build_comment_response(row: sqlite3.Row, viewer: str, conn: sqlite3.Connecti
 
 
 @app.get("/posts/{post_id}/comments")
-async def get_comments(post_id: int, viewer: str = ""):
-    viewer = normalize(viewer) if viewer else ""
+async def get_comments(post_id: int, request: Request):
+    viewer = ""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
+            viewer = payload.get("sub", "")
+        except jwt.PyJWTError:
+            pass
     with get_db() as conn:
         post_row = conn.execute("SELECT id FROM posts WHERE id = ?", (post_id,)).fetchone()
         if not post_row:
@@ -1119,7 +1137,6 @@ async def get_comments(post_id: int, viewer: str = ""):
 
 
 class CreateCommentRequest(BaseModel):
-    tg_username: str
     text: str
 
 

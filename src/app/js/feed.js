@@ -32,8 +32,7 @@ function attachFeedMenu(container) {
 }
 
 async function fetchFeedPage(page) {
-  const u = window._tgUsername || '';
-  const res = await fetch(`${API}/posts?viewer=${encodeURIComponent(u)}&page=${page}&limit=${FEED_PAGE}`);
+  const res = await apiFetch(`${API}/posts?page=${page}&limit=${FEED_PAGE}`);
   if (!res.ok) throw new Error('fetch failed');
   return res.json();
 }
@@ -162,7 +161,6 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tg_username: u,
         text,
         images: images.map(m => m.src),
       }),

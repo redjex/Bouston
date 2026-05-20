@@ -55,10 +55,9 @@ async function renderComments() {
   container.innerHTML = '<p class="thread-empty">Загрузка...</p>';
 
   if (_threadIsServer) {
-    const u = window._tgUsername || '';
     let comments = [];
     try {
-      const res = await fetch(`${API}/posts/${_threadPostId}/comments?viewer=${encodeURIComponent(u)}`);
+      const res = await apiFetch(`${API}/posts/${_threadPostId}/comments`);
       if (res.ok) comments = await res.json();
     } catch {}
 
@@ -259,7 +258,7 @@ function refreshCommentCount(postId) {
 
 async function _refreshServerCommentCount(postId) {
   try {
-    const res = await fetch(`${API}/posts/${postId}/comments?viewer=`);
+    const res = await apiFetch(`${API}/posts/${postId}/comments`);
     if (!res.ok) return;
     const comments = await res.json();
     document.querySelectorAll('.btn-comments').forEach(btn => {
@@ -287,13 +286,12 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
   const emptyMsg  = container.querySelector('.thread-empty');
 
   if (_threadIsServer) {
-    const u = window._tgUsername;
-    if (!u) { btn.disabled = false; return; }
+    if (!window._tgUsername) { btn.disabled = false; return; }
     try {
       const res = await apiFetch(`${API}/posts/${_threadPostId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tg_username: u, text }),
+        body: JSON.stringify({ text }),
       });
       if (res.ok) {
         const newComment = await res.json();
