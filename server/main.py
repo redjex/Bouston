@@ -213,6 +213,34 @@ def db_set_registered(username: str, avatar_path: str | None, bio: str | None) -
 
 # ── Rate limiting (in-memory) ─────────────────────────────────────────────────
 
+# ── Post spam protection ──────────────────────────────────────────────────────
+POST_COOLDOWN   = 10       # минимум секунд между постами
+POST_WINDOW     = 60       # окно в секундах
+POST_WINDOW_MAX = 5        # максимум постов за окно
+
+# username → timestamp последнего поста
+_last_post_time: dict[str, float] = {}
+
+# username → список timestamp'ов постов за последнюю минуту
+_post_history: dict[str, list[float]] = {}
+
+
+def check_post_rate(username: str) -> None:
+    now = time.time()
+    last = _last_post_time.get(username, 0)
+    if now - last < POST_COOLDOWN:
+        remaining = int(POST_COOLDOWN - (now - last))
+        raise HTTPException(429, f"Не так быстро! Подожди ещё {remaining} сек.")
+
+    history = _post_history.get(username, [])
+    history = [t for t in history if now - t < POST_WINDOW]
+    if len(history) >= POST_WINDOW_MAX:
+        raise HTTPException(429, f"Слишком много постов. Подожди немного.")
+    history.append(now)
+    _post_history[username] = history
+    _last_post_time[username] = now
+
+
 # username → {code, expires_at, ip}
 pending_codes: dict[str, dict] = {}
 
@@ -845,6 +873,7 @@ class CreatePostRequest(BaseModel):
 
 @app.post("/posts")
 async def create_post(body: CreatePostRequest, username: str = Depends(require_auth)):
+    check_post_rate(username)
     if len(body.text) > MAX_POST_TEXT:
         raise HTTPException(400, f"Текст не может быть длиннее {MAX_POST_TEXT} символов")
     if len(body.images) > MAX_IMAGES:
@@ -992,7 +1021,6 @@ async def react_to_post(post_id: int, body: ReactRequest, username: str = Depend
             if emoji not in unique_emojis:
                 if len(unique_emojis) >= 6:
                     raise HTTPException(400, "На этом посту уже 6 уникальных реакций")
-                # если добавляем 6-ю уникальную реакцию (не ❤️) и ❤️ уже есть — вытесняем ❤️
                 HEART = "❤️"
                 if len(unique_emojis) == 5 and emoji != HEART and HEART in unique_emojis:
                     conn.execute(
@@ -1019,11 +1047,15 @@ async def react_to_post(post_id: int, body: ReactRequest, username: str = Depend
         ).fetchall()
 
     reactions: dict[str, int] = {}
-    my_reactions: list[str] = []
     for rx in rx_rows:
         reactions[rx["emoji"]] = reactions.get(rx["emoji"], 0) + 1
-        if rx["tg_username"] == username:
-            my_reactions.append(rx["emoji"])
+    my_reactions: list[str] = [rx["emoji"] for rx in rx_rows if rx["tg_username"] == username]
+
+    asyncio.create_task(broadcast_event({
+        "type":      "reaction_update",
+        "postId":    post_id,
+        "reactions": reactions,
+    }))
 
     return {"reactions": reactions, "myReactions": my_reactions}
 

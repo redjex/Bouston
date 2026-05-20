@@ -174,9 +174,11 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     clearComposeImages('feed');
     renderFeedPosts();
   } catch (err) {
-    if (err.message !== 'unauthorized') alert(err.message);
+    if (err.message === 'unauthorized') return;
+    showPostError(err.message, btn);
   } finally {
-    btn.disabled = false;
+    // Кнопку разблокирует showPostError (при кулдауне) или сразу здесь
+    if (!btn.textContent.match(/^\d+с$/)) btn.disabled = false;
   }
 });
 

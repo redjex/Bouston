@@ -517,6 +517,44 @@ initComposePhoto('profile');
 watchComposeEmpty('feed-compose-input');
 watchComposeEmpty('profile-compose-input');
 
+/* ── Spam toast + button cooldown ──────────── */
+let _toastTimer = null;
+
+function showPostError(message, btnEl) {
+  // Toast
+  let toast = document.getElementById('post-error-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'post-error-toast';
+    toast.className = 'post-error-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('post-error-toast--visible');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => toast.classList.remove('post-error-toast--visible'), 3500);
+
+  // Если передана кнопка и в сообщении есть кулдаун — блокируем с обратным отсчётом
+  if (!btnEl) return;
+  const match = message.match(/(\d+)\s*сек/);
+  if (!match) return;
+  let secs = parseInt(match[1]);
+  const origText = btnEl.dataset.origText || btnEl.textContent;
+  btnEl.dataset.origText = origText;
+  btnEl.disabled = true;
+  btnEl.textContent = `${secs}с`;
+  const iv = setInterval(() => {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(iv);
+      btnEl.disabled = false;
+      btnEl.textContent = origText;
+    } else {
+      btnEl.textContent = `${secs}с`;
+    }
+  }, 1000);
+}
+
 /* ── Utils ─────────────────────────────────── */
 function escapeHtml(str) {
   return String(str)
@@ -929,6 +967,15 @@ function syncReactions(id, post) {
   document.querySelectorAll(`.post__reactions[data-post-id="${id}"]`).forEach(w => {
     w.replaceWith(buildReactionsEl(post));
   });
+}
+
+function applyReactionUpdate(postId, reactions) {
+  const post = _serverPostsMap.get(postId);
+  if (!post) return;
+  // Сохраняем myReactions текущего пользователя — сервер их не присылает в broadcast
+  post.reactions = reactions;
+  post.likes = getTotalReactions(post);
+  syncReactions(postId, post);
 }
 
 function reactionLimit() {

@@ -2331,6 +2331,31 @@ body {
     opacity: 0.75;
 }
 
+/* ── post error toast ── */
+.post-error-toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(12px);
+    background: #2a1a1a;
+    border: 1px solid #c0392b55;
+    color: #e74c3c;
+    font-family: 'Inter', sans-serif;
+    font-size: 1.3rem;
+    padding: 10px 20px;
+    border-radius: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 2000;
+    white-space: nowrap;
+}
+
+.post-error-toast--visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
 /* ── shake animation ── */
 @keyframes shake {
     0% {

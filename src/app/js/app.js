@@ -137,8 +137,9 @@ async function connectEvents() {
   es.onmessage = e => {
     try {
       const data = JSON.parse(e.data);
-      if (data.type === 'avatar_update') updateAvatarsInDom(data.username, data.avatarUrl);
-      if (data.type === 'new_post') prependPostToFeed(data.post);
+      if (data.type === 'avatar_update')   updateAvatarsInDom(data.username, data.avatarUrl);
+      if (data.type === 'new_post')        prependPostToFeed(data.post);
+      if (data.type === 'reaction_update') applyReactionUpdate(data.postId, data.reactions);
     } catch {}
   };
 

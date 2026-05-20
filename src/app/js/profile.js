@@ -384,9 +384,10 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     clearComposeImages('profile');
     renderProfilePosts();
   } catch (err) {
-    if (err.message !== 'unauthorized') alert(err.message);
+    if (err.message === 'unauthorized') return;
+    showPostError(err.message, btn);
   } finally {
-    btn.disabled = false;
+    if (!btn.textContent.match(/^\d+с$/)) btn.disabled = false;
   }
 });
 
