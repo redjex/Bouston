@@ -134,13 +134,15 @@ async function renderProfilePosts() {
 }
 
 /* ── Modal ───────────────────────────────────── */
-let _pendingAvatar = undefined;
-let _pendingBanner = undefined;
+let _pendingAvatar   = undefined;
+let _pendingBanner   = undefined;
+let _originalUsername = '';
 
 function openModal() {
   _pendingAvatar = undefined;
   _pendingBanner = undefined;
   const p = getProfile();
+  _originalUsername = p.username || '';
   document.getElementById('input-name').value             = p.name;
   document.getElementById('input-username-profile').value = p.username ? '@' + p.username : '';
   document.getElementById('input-bio').value              = p.bio;
@@ -246,9 +248,10 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   const newName  = document.getElementById('input-name').value.trim();
   const newUser  = document.getElementById('input-username-profile').value.trim().replace(/^@/, '');
   const newBio   = document.getElementById('input-bio').value.trim();
+  const newAvatar  = _pendingAvatar;
+  const newBanner  = _pendingBanner;
 
-  p.name = newName || p.name;
-
+  // ── Клиентская валидация юзернейма ──────────────────
   if (newUser) {
     if (newUser.length < 3) {
       showFieldError('input-username-profile', 'Минимум 3 символа');
@@ -260,11 +263,56 @@ document.getElementById('btn-save').addEventListener('click', async () => {
     }
   }
   clearFieldError('input-username-profile');
+
+  const usernameChanged = newUser !== _originalUsername;
+
+  // ── Если юзернейм меняется — сначала проверяем на сервере ──
+  if (usernameChanged) {
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    try {
+      const tgUser = await window.electronAPI?.getTgUser();
+      if (tgUser?.username) {
+        const res = await apiFetch('https://bouston.xyz/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tg_username:      tgUser.username,
+            display_name:     newName || p.name,
+            profile_username: newUser || null,
+            bio:              newBio  || p.bio,
+            avatar_b64:       newAvatar !== undefined ? newAvatar : null,
+            banner_b64:       newBanner !== undefined ? newBanner : null,
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          showFieldError('input-username-profile', d.detail || 'Ошибка сервера');
+          return;
+        }
+
+        // Сервер одобрил — мгновенно обновляем @handle на всех постах
+        if (newUser && window._tgUsername) {
+          const handle = '@' + newUser.toLowerCase();
+          document.querySelectorAll(`[data-author="${window._tgUsername}"] .post__handle`).forEach(el => {
+            el.textContent = handle;
+          });
+        }
+      }
+    } catch (err) {
+      if (err.message !== 'unauthorized') showFieldError('input-username-profile', 'Нет соединения с сервером');
+      return;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ── Сервер ок (или юзернейм не менялся) — применяем локально ──
+  p.name = newName || p.name;
   p.username = newUser || p.username;
   p.bio      = newBio  || p.bio;
-  const newAvatar = _pendingAvatar;
   if (newAvatar !== undefined) p.avatar = newAvatar;
-  if (_pendingBanner !== undefined) p.banner = _pendingBanner;
+  if (newBanner  !== undefined) p.banner = newBanner;
 
   invalidateProfileCache();
   saveProfile(p);
@@ -273,14 +321,11 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   refreshPostsVerifiedState(p.verified);
 
   if (window._tgUsername) {
-    // Мгновенно обновляем аватарки на своих постах и комментариях
     if (newAvatar !== undefined) {
       document.querySelectorAll(`[data-author="${window._tgUsername}"] .avatar`).forEach(img => {
         img.src = newAvatar;
       });
     }
-
-    // Мгновенно обновляем имя на своих постах и комментариях
     document.querySelectorAll(`[data-author="${window._tgUsername}"] .post__name`).forEach(el => {
       el.textContent = p.name;
     });
@@ -289,23 +334,25 @@ document.getElementById('btn-save').addEventListener('click', async () => {
     });
   }
 
-  // Отправляем изменения на сервер
-  try {
-    const tgUser = await window.electronAPI?.getTgUser();
-    if (tgUser?.username) {
-      await apiFetch('https://bouston.xyz/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tg_username:      tgUser.username,
-          display_name:     p.name,
-          profile_username: p.username,
-          bio:              p.bio,
-          avatar_b64:       newAvatar !== undefined ? newAvatar : null,
-        }),
-      });
-    }
-  } catch {}
+  // ── Если юзернейм не менялся — шлём остальные изменения на сервер ──
+  if (!usernameChanged) {
+    try {
+      const tgUser = await window.electronAPI?.getTgUser();
+      if (tgUser?.username) {
+        await apiFetch('https://bouston.xyz/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tg_username: tgUser.username,
+            display_name: p.name,
+            bio:          p.bio,
+            avatar_b64:   newAvatar !== undefined ? newAvatar : null,
+            banner_b64:   newBanner !== undefined ? newBanner : null,
+          }),
+        });
+      }
+    } catch {}
+  }
 });
 
 /* ── Profile compose ─────────────────────────── */

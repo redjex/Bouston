@@ -471,7 +471,7 @@ body {
     position: absolute;
     bottom: -29px;
     left: -24%;
-    width: 88%;
+    width: 100%;
     height: auto;
     pointer-events: none;
     z-index: 0;
@@ -1276,7 +1276,6 @@ body {
 .thread-panel__body {
     flex: 1;
     overflow-y: auto;
-    scroll-behavior: smooth;
     padding: 16px 20px;
     display: flex;
     flex-direction: column;
@@ -2294,6 +2293,42 @@ body {
 
 .confirm-box__btn:active {
     opacity: 0.65;
+}
+
+/* ── user profile view ── */
+#user-profile-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 29px 0 96px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    gap: 12px;
+    scrollbar-width: none;
+}
+
+#user-profile-wrap::-webkit-scrollbar {
+    display: none;
+}
+
+#up-posts-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.post__name,
+.post__handle,
+.post__header .avatar {
+    cursor: pointer;
+}
+
+.post__name:hover,
+.post__handle:hover {
+    opacity: 0.75;
 }
 
 /* ── shake animation ── */

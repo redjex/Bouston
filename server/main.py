@@ -43,15 +43,17 @@ dp = Dispatcher()
 
 # ── Пути ──────────────────────────────────────────────────────────────────────
 
-BASE_DIR  = Path(__file__).parent
+BASE_DIR      = Path(__file__).parent
 IMG_DIR       = BASE_DIR / "img"
 POSTS_IMG_DIR = IMG_DIR / "posts"
+BANNERS_DIR   = IMG_DIR / "banners"
 DB_PATH       = BASE_DIR / "bouston.db"
 BANER_PATH    = BASE_DIR / "baner.png"
 CODE_PATH     = BASE_DIR / "code.png"
 
 IMG_DIR.mkdir(exist_ok=True)
 POSTS_IMG_DIR.mkdir(exist_ok=True)
+BANNERS_DIR.mkdir(exist_ok=True)
 
 SERVER_BASE = "https://bouston.xyz"
 
@@ -105,6 +107,7 @@ def init_db() -> None:
         if 'display_name'     not in cols: conn.execute("ALTER TABLE users ADD COLUMN display_name     TEXT")
         if 'profile_username' not in cols: conn.execute("ALTER TABLE users ADD COLUMN profile_username TEXT")
         if 'verified'         not in cols: conn.execute("ALTER TABLE users ADD COLUMN verified         INTEGER DEFAULT 0")
+        if 'banner_path'      not in cols: conn.execute("ALTER TABLE users ADD COLUMN banner_path      TEXT")
 
         # таблица постов
         conn.execute("""
@@ -153,6 +156,14 @@ def init_db() -> None:
                 PRIMARY KEY (comment_id, tg_username),
                 FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE
             )
+        """)
+        conn.commit()
+
+    # Нормализуем profile_username в нижний регистр (миграция старых данных)
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE users SET profile_username = LOWER(profile_username)
+            WHERE profile_username IS NOT NULL AND profile_username != LOWER(profile_username)
         """)
         conn.commit()
 
@@ -527,6 +538,29 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
     return {"ok": True, "token": token}
 
 
+@app.get("/users/{username}")
+async def get_user_fast(username: str):
+    """Быстрый профиль из БД — без обращений к Telegram API."""
+    u = normalize(username)
+    user = db_get_user(u)
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+
+    t = int(user["updated_at"] or 0)
+    avatar_url = f"{SERVER_BASE}/img/{u}.jpg?t={t}" if (user["avatar_path"] and Path(user["avatar_path"]).exists()) else None
+    banner_url = f"{SERVER_BASE}/img/banners/{u}.jpg?t={t}" if (user["banner_path"] and Path(user["banner_path"]).exists()) else None
+
+    return {
+        "username":         user["username"],
+        "display_name":     user["display_name"] or user["first_name"] or user["username"],
+        "profile_username": user["profile_username"] or user["username"],
+        "bio":              user["bio"],
+        "verified":         bool(user["verified"]),
+        "avatar_url":       avatar_url,
+        "banner_url":       banner_url,
+    }
+
+
 @app.post("/user-info")
 async def get_user_info(body: UserInfoRequest):
     username = normalize(body.username)
@@ -592,6 +626,7 @@ class UpdateProfileRequest(BaseModel):
     profile_username: str | None = None
     bio:              str | None = None
     avatar_b64:       str | None = None
+    banner_b64:       str | None = None
 
 
 @app.put("/profile")
@@ -607,7 +642,7 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
         raise HTTPException(400, f"Bio не может быть длиннее {MAX_BIO_LEN} символов")
 
     if body.profile_username is not None:
-        u = body.profile_username.strip().lstrip("@")
+        u = body.profile_username.strip().lstrip("@").lower()
         if u and not USERNAME_RE.match(u):
             raise HTTPException(400, "Юзернейм: от 3 до 20 символов, только буквы, цифры, _ и .")
         body.profile_username = u or None
@@ -616,8 +651,8 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
         if body.profile_username:
             with get_db() as conn:
                 taken = conn.execute(
-                    "SELECT 1 FROM users WHERE profile_username = ? AND username != ?",
-                    (body.profile_username, tg_username),
+                    "SELECT 1 FROM users WHERE LOWER(profile_username) = ? AND LOWER(username) != ?",
+                    (body.profile_username, tg_username.lower()),
                 ).fetchone()
             if taken:
                 raise HTTPException(400, "Этот юзернейм уже занят")
@@ -640,19 +675,36 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
         avatar_file.write_bytes(img_bytes)
         new_avatar_path = str(avatar_file)
 
+    # Сохраняем баннер если передан
+    new_banner_path: str | None = None
+    if body.banner_b64:
+        raw_b64 = body.banner_b64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            img_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            raise HTTPException(400, "Неверный формат баннера")
+        if len(img_bytes) > MAX_AVATAR_BYTES:
+            raise HTTPException(400, "Баннер слишком большой (макс 5 МБ)")
+        banner_file = BANNERS_DIR / f"{tg_username}.jpg"
+        banner_file.write_bytes(img_bytes)
+        new_banner_path = str(banner_file)
+
     with get_db() as conn:
+        fields = ["display_name = ?", "bio = ?", "updated_at = ?"]
+        values = [body.display_name, body.bio, now]
+        if body.profile_username is not None:
+            fields.append("profile_username = ?")
+            values.append(body.profile_username)
         if new_avatar_path:
-            conn.execute("""
-                UPDATE users SET display_name = ?, profile_username = ?, bio = ?,
-                                 avatar_path = ?, updated_at = ?
-                WHERE username = ?
-            """, (body.display_name, body.profile_username, body.bio,
-                  new_avatar_path, now, tg_username))
-        else:
-            conn.execute("""
-                UPDATE users SET display_name = ?, profile_username = ?, bio = ?, updated_at = ?
-                WHERE username = ?
-            """, (body.display_name, body.profile_username, body.bio, now, tg_username))
+            fields.append("avatar_path = ?")
+            values.append(new_avatar_path)
+        if new_banner_path:
+            fields.append("banner_path = ?")
+            values.append(new_banner_path)
+        values.append(tg_username)
+        conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE username = ?", values)
         conn.commit()
 
     if new_avatar_path:
@@ -832,7 +884,10 @@ async def create_post(body: CreatePostRequest, username: str = Depends(require_a
 
     with get_db() as conn:
         row = conn.execute(POSTS_QUERY + "WHERE p.id = ?", (post_id,)).fetchone()
-        return build_post_response(row, username, conn)
+        post_data = build_post_response(row, username, conn)
+
+    asyncio.create_task(broadcast_event({"type": "new_post", "post": post_data}))
+    return post_data
 
 
 class EditPostRequest(BaseModel):

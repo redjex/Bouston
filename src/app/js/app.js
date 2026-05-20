@@ -8,12 +8,13 @@ function showView(name) {
   _currentView = name;
   document.getElementById('view-feed').classList.toggle('view--active', name === 'feed');
   document.getElementById('view-profile').classList.toggle('view--active', name === 'profile');
+  document.getElementById('view-user-profile').classList.toggle('view--active', name === 'user-profile');
   document.getElementById('nav-home').classList.toggle('active', name === 'feed');
   document.getElementById('nav-profile').classList.toggle('active', name === 'profile');
   if (name === 'feed') {
     renderFeedPosts();
     _scrollTopBtn.classList.toggle('visible', _feedEl.scrollTop > 300);
-  } else {
+  } else if (name === 'profile') {
     renderProfile();
     renderProfilePosts();
     _scrollTopBtn.classList.toggle('visible', _profileWrap.scrollTop > 300);
@@ -38,8 +39,16 @@ _profileWrap.addEventListener('scroll', () => {
     document.getElementById('view-profile').classList.toggle('view--scrolled', _profileWrap.scrollTop > 10);
   }
 });
+document.getElementById('user-profile-wrap').addEventListener('scroll', () => {
+  if (_currentView === 'user-profile') {
+    _scrollTopBtn.classList.toggle('visible', document.getElementById('user-profile-wrap').scrollTop > 300);
+    document.getElementById('view-user-profile').classList.toggle('view--scrolled', document.getElementById('user-profile-wrap').scrollTop > 10);
+  }
+});
 _scrollTopBtn.addEventListener('click', () => {
-  (_currentView === 'feed' ? _feedEl : _profileWrap).scrollTo({ top: 0, behavior: 'smooth' });
+  if (_currentView === 'feed') _feedEl.scrollTo({ top: 0, behavior: 'smooth' });
+  else if (_currentView === 'profile') _profileWrap.scrollTo({ top: 0, behavior: 'smooth' });
+  else if (_currentView === 'user-profile') document.getElementById('user-profile-wrap').scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 /* ── Close menu on outside click ────────────── */
@@ -129,6 +138,7 @@ async function connectEvents() {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'avatar_update') updateAvatarsInDom(data.username, data.avatarUrl);
+      if (data.type === 'new_post') prependPostToFeed(data.post);
     } catch {}
   };
 

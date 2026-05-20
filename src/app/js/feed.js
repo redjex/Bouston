@@ -107,6 +107,45 @@ function _attachFeedSentinel(container) {
   _feedObserver.observe(s);
 }
 
+function prependPostToFeed(post) {
+  const container = document.getElementById('posts-container');
+  if (!container) return;
+
+  // Не дублируем пост если он уже отрисован
+  if (document.querySelector(`.post[data-post-id="${post.id}"]`)) return;
+
+  post.isOwn = post.author?.tgUsername === window._tgUsername;
+  registerServerPost(post);
+
+  const postEl = buildPostEl(post, null, null, false, '', 0, false);
+  postEl.classList.remove('post--enter');
+
+  const todayKey = getDateKey(post.createdAt || post.id);
+  const firstChild = container.firstElementChild;
+
+  if (firstChild && firstChild.classList.contains('date-separator')) {
+    const firstPost = container.querySelector('.post[data-post-id]');
+    const firstPostTs = firstPost ? (_serverPostsMap.get(Number(firstPost.dataset.postId))?.createdAt || 0) : 0;
+    const existingKey = firstPostTs ? getDateKey(firstPostTs) : null;
+    if (existingKey === todayKey) {
+      // Уже есть разделитель за сегодня — вставляем пост после него
+      firstChild.after(postEl);
+    } else {
+      // Разделитель другого дня — вставляем свой разделитель + пост в начало
+      container.prepend(postEl);
+      container.prepend(buildDateSeparator(post.createdAt || post.id));
+    }
+  } else {
+    // Нет разделителей вообще (пустой фид или только текст загрузки)
+    const emptyEl = container.querySelector('.feed__empty');
+    if (emptyEl) emptyEl.remove();
+    container.prepend(postEl);
+    container.prepend(buildDateSeparator(post.createdAt || post.id));
+  }
+
+  attachFeedMenu(container);
+}
+
 document.getElementById('feed-btn-post').addEventListener('click', async () => {
   const text   = getComposeText('feed-compose-input').trim();
   const images = getComposeImages('feed');

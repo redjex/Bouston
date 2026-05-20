@@ -1197,6 +1197,15 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   const textWrap = el.querySelector('.post__text-wrap');
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
   mountVideoPlayers(el);
+
+  // Помечаем пост как многострочный для увеличенного градиента
+  requestAnimationFrame(() => {
+    const textEl = el.querySelector('.post__text');
+    if (!textEl) return;
+    const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
+    if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
+  });
+
   return el;
 }
 
