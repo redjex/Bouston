@@ -98,10 +98,48 @@ async function initTgProfile() {
   } catch {}
 }
 
+/* ── Real-time avatar updates (SSE) ─────────────── */
+function updateAvatarsInDom(username, avatarUrl) {
+  document.querySelectorAll(`[data-author="${username}"] .avatar`).forEach(img => {
+    img.src = avatarUrl;
+  });
+  if (username === window._tgUsername) {
+    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar', 'profile-avatar'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.src = avatarUrl;
+    });
+  }
+}
+
+let _sseSource = null;
+
+async function connectEvents() {
+  if (_sseSource) { _sseSource.close(); _sseSource = null; }
+  const token = await window.electronAPI?.getAuthToken();
+  if (!token) return;
+
+  const es = new EventSource(`${API}/events?token=${encodeURIComponent(token)}`);
+  _sseSource = es;
+
+  es.onmessage = e => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'avatar_update') updateAvatarsInDom(data.username, data.avatarUrl);
+    } catch {}
+  };
+
+  es.onerror = () => {
+    es.close();
+    _sseSource = null;
+    setTimeout(connectEvents, 5000);
+  };
+}
+
 checkAuth().then(ok => {
   if (!ok) return;
   initTgProfile().finally(() => {
     renderFeedComposeAvatar();
     renderFeedPosts();
+    connectEvents();
   });
 });

@@ -93,10 +93,55 @@ async function renderComments() {
   });
 }
 
+function animateRemoveRow(row) {
+  // Сохраняем реальные размеры до любых изменений
+  const h  = row.offsetHeight;
+  const mb = parseInt(getComputedStyle(row).marginBottom) || 0;
+
+  // Фаза 1: плавное исчезновение
+  row.style.transition = 'opacity 0.35s ease';
+  void row.offsetHeight; // reflow — браузер фиксирует начальный opacity:1
+  row.style.opacity = '0';
+
+  row.addEventListener('transitionend', function onFade(e) {
+    if (e.propertyName !== 'opacity') return;
+    row.removeEventListener('transitionend', onFade);
+
+    // Фиксируем размеры строки явно (без блокировки контейнера —
+    // она вызывала flex-shrink на соседних строках при 4+ комментариях)
+    row.style.height       = h + 'px';
+    row.style.marginBottom = mb + 'px';
+    row.style.overflow     = 'hidden';
+
+    void row.offsetHeight; // reflow — браузер фиксирует height:Xpx
+
+    // Фаза 2: схлопывание
+    row.style.transition   = 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1), margin-bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+    row.style.height       = '0';
+    row.style.marginBottom = '0';
+
+    row.addEventListener('transitionend', function onCollapse(e) {
+      if (e.propertyName !== 'height') return;
+      row.removeEventListener('transitionend', onCollapse);
+      row.remove();
+    });
+  });
+}
+
 function buildCommentEl(c, isServer) {
+  const row = document.createElement('div');
+  row.className = 'comment-row';
+  if (c.author?.tgUsername) row.dataset.author = c.author.tgUsername;
+  else if (c.isOwn && window._tgUsername) row.dataset.author = window._tgUsername;
+
   const el = document.createElement('div');
   el.className = 'comment';
-  const avatarSrc = c.author.avatarUrl || '../../img/default_avatar.png';
+  row.appendChild(el);
+
+  // Для своих комментариев используем локальный профиль — он всегда актуален
+  const avatarSrc = c.isOwn
+    ? (getProfile().avatar || c.author.avatarUrl || '../../img/default_avatar.png')
+    : (c.author.avatarUrl || '../../img/default_avatar.png');
   const badgeHtml = c.author.isVerified
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
     : '';
@@ -107,10 +152,7 @@ function buildCommentEl(c, isServer) {
       <div class="comment__namerow">
         <span class="comment__name">${escapeHtml(c.author.displayName)}</span>
         ${badgeHtml}
-        <span class="comment__time">${formatPostTime(c.createdAt)}</span>
-        ${c.isOwn ? `<button class="comment__delete" data-id="${c.id}">
-          <img src="../../img/close.svg" alt="" />
-        </button>` : ''}
+        ${c.isOwn ? `<button class="comment__menu-btn" aria-label="Меню"><span></span><span></span><span></span></button>` : ''}
       </div>
       <p class="comment__text">${escapeHtml(c.text)}</p>
       <div class="comment__footer">
@@ -118,26 +160,42 @@ function buildCommentEl(c, isServer) {
           <img src="../../img/${c.myLike ? 'like.svg' : 'like_n.svg'}" alt="" />
           ${c.likesCount ? `<span>${c.likesCount}</span>` : ''}
         </button>
+        <span class="comment__time">${formatPostTime(c.createdAt)}</span>
       </div>
     </div>
   `;
 
-  const deleteBtn = el.querySelector('.comment__delete');
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', async () => {
+  if (c.isOwn) {
+    const island    = document.createElement('div');
+    island.className = 'comment__island';
+
+    const trashBtn  = document.createElement('button');
+    trashBtn.className = 'comment__trash-btn';
+    trashBtn.innerHTML = `<img src="../../img/trash.svg" alt="" />`;
+    island.appendChild(trashBtn);
+    row.appendChild(island);
+
+    el.querySelector('.comment__menu-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = row.classList.contains('comment-row--open');
+      document.querySelectorAll('.comment-row--open').forEach(r => r.classList.remove('comment-row--open'));
+      if (!isOpen) row.classList.add('comment-row--open');
+    });
+
+    trashBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      row.classList.remove('comment-row--open');
+
       if (isServer) {
         const u = window._tgUsername || '';
-        await apiFetch(
-          `${API}/posts/${_threadPostId}/comments/${c.id}`,
-          { method: 'DELETE' }
-        ).catch(() => {});
-        await renderComments();
-        await _refreshServerCommentCount(_threadPostId);
+        apiFetch(`${API}/posts/${_threadPostId}/comments/${c.id}`, { method: 'DELETE' }).catch(() => {});
+        _refreshServerCommentCount(_threadPostId);
       } else {
         deleteComment(_threadPostId, c.id);
-        renderComments();
         refreshCommentCount(_threadPostId);
       }
+
+      animateRemoveRow(row);
     });
   }
 
@@ -163,7 +221,7 @@ function buildCommentEl(c, isServer) {
     }
   });
 
-  return el;
+  return row;
 }
 
 function _applyLikeToBtn(btn, liked, count) {
@@ -223,6 +281,9 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
   const btn = document.getElementById('thread-btn-post');
   btn.disabled = true;
 
+  const container = document.getElementById('thread-comments');
+  const emptyMsg  = container.querySelector('.thread-empty');
+
   if (_threadIsServer) {
     const u = window._tgUsername;
     if (!u) { btn.disabled = false; return; }
@@ -233,19 +294,34 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
         body: JSON.stringify({ tg_username: u, text }),
       });
       if (res.ok) {
+        const newComment = await res.json();
         input.value = '';
         input.style.height = 'auto';
         input.closest('.thread-panel__compose')?.classList.remove('multiline');
-        await renderComments();
+        if (emptyMsg) emptyMsg.remove();
+        container.appendChild(buildCommentEl(newComment, true));
+        container.scrollTop = container.scrollHeight;
         await _refreshServerCommentCount(_threadPostId);
       }
     } catch {}
   } else {
+    const id  = Date.now();
     saveComment(_threadPostId, text);
     input.value = '';
     input.style.height = 'auto';
     input.closest('.thread-panel__compose')?.classList.remove('multiline');
-    renderComments();
+    const profile = getProfile();
+    const mapped  = {
+      id, text, createdAt: id, likesCount: 0, myLike: false, isOwn: true,
+      author: {
+        displayName: profile.name,
+        avatarUrl:   profile.avatar || '../../img/default_avatar.png',
+        isVerified:  profile.verified === true,
+      },
+    };
+    if (emptyMsg) emptyMsg.remove();
+    container.appendChild(buildCommentEl(mapped, false));
+    container.scrollTop = container.scrollHeight;
     refreshCommentCount(_threadPostId);
   }
 
@@ -264,4 +340,8 @@ document.getElementById('thread-compose-input').addEventListener('input', functi
   this.style.height = this.scrollHeight + 'px';
   const compose = this.closest('.thread-panel__compose');
   if (compose) compose.classList.toggle('multiline', this.scrollHeight > 40);
+});
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.comment-row--open').forEach(r => r.classList.remove('comment-row--open'));
 });

@@ -253,7 +253,8 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   clearFieldError('input-username-profile');
   p.username = newUser || p.username;
   p.bio      = newBio  || p.bio;
-  if (_pendingAvatar !== undefined) p.avatar = _pendingAvatar;
+  const newAvatar = _pendingAvatar;
+  if (newAvatar !== undefined) p.avatar = newAvatar;
   if (_pendingBanner !== undefined) p.banner = _pendingBanner;
 
   invalidateProfileCache();
@@ -261,6 +262,13 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   closeModal();
   renderProfile();
   refreshPostsVerifiedState(p.verified);
+
+  // Мгновенно обновляем аватарки на своих постах в DOM
+  if (newAvatar !== undefined && window._tgUsername) {
+    document.querySelectorAll(`[data-author="${window._tgUsername}"] .avatar`).forEach(img => {
+      img.src = newAvatar;
+    });
+  }
 
   // Отправляем изменения на сервер
   try {
@@ -274,6 +282,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
           display_name:     p.name,
           profile_username: p.username,
           bio:              p.bio,
+          avatar_b64:       newAvatar !== undefined ? newAvatar : null,
         }),
       });
     }

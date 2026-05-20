@@ -45,7 +45,7 @@ function createWindow() {
     icon: path.join(__dirname, 'img', 'logo_white.png'),
   });
 
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
   
   if (isApp) {
     mainWindow.setResizable(true);

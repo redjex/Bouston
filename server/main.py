@@ -20,6 +20,7 @@ from aiogram.types import FSInputFile
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -53,6 +54,25 @@ IMG_DIR.mkdir(exist_ok=True)
 POSTS_IMG_DIR.mkdir(exist_ok=True)
 
 SERVER_BASE = "https://bouston.xyz"
+
+# ── SSE subscribers ───────────────────────────────────────────────────────────
+
+_sse_subscribers: list[asyncio.Queue] = []
+
+
+async def broadcast_event(data: dict) -> None:
+    msg = "data: " + json.dumps(data) + "\n\n"
+    dead = []
+    for q in _sse_subscribers:
+        try:
+            q.put_nowait(msg)
+        except asyncio.QueueFull:
+            dead.append(q)
+    for q in dead:
+        try:
+            _sse_subscribers.remove(q)
+        except ValueError:
+            pass
 
 # ── База данных ───────────────────────────────────────────────────────────────
 
@@ -563,11 +583,15 @@ MAX_IMAGES       = 10
 MAX_LIMIT        = 100
 
 
+MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
 class UpdateProfileRequest(BaseModel):
     tg_username:      str
     display_name:     str | None = None
     profile_username: str | None = None
     bio:              str | None = None
+    avatar_b64:       str | None = None
 
 
 @app.put("/profile")
@@ -589,14 +613,84 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
         body.profile_username = u or None
 
     now = time.time()
+
+    # Сохраняем аватарку если передана
+    new_avatar_path: str | None = None
+    if body.avatar_b64:
+        raw_b64 = body.avatar_b64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            img_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            raise HTTPException(400, "Неверный формат аватарки")
+        if len(img_bytes) > MAX_AVATAR_BYTES:
+            raise HTTPException(400, "Аватарка слишком большая (макс 5 МБ)")
+        avatar_file = IMG_DIR / f"{tg_username}.jpg"
+        avatar_file.write_bytes(img_bytes)
+        new_avatar_path = str(avatar_file)
+
     with get_db() as conn:
-        conn.execute("""
-            UPDATE users SET display_name = ?, profile_username = ?, bio = ?, updated_at = ?
-            WHERE username = ?
-        """, (body.display_name, body.profile_username, body.bio, now, tg_username))
+        if new_avatar_path:
+            conn.execute("""
+                UPDATE users SET display_name = ?, profile_username = ?, bio = ?,
+                                 avatar_path = ?, updated_at = ?
+                WHERE username = ?
+            """, (body.display_name, body.profile_username, body.bio,
+                  new_avatar_path, now, tg_username))
+        else:
+            conn.execute("""
+                UPDATE users SET display_name = ?, profile_username = ?, bio = ?, updated_at = ?
+                WHERE username = ?
+            """, (body.display_name, body.profile_username, body.bio, now, tg_username))
         conn.commit()
 
+    if new_avatar_path:
+        avatar_url = f"{SERVER_BASE}/img/{tg_username}.jpg?t={int(now)}"
+        asyncio.create_task(broadcast_event({
+            "type":      "avatar_update",
+            "username":  tg_username,
+            "avatarUrl": avatar_url,
+        }))
+
     return {"ok": True}
+
+
+@app.get("/events")
+async def sse_events(token: str, request: Request):
+    try:
+        payload  = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(401, "Invalid token")
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid token")
+
+    q: asyncio.Queue[str] = asyncio.Queue(maxsize=64)
+    _sse_subscribers.append(q)
+
+    async def generator():
+        try:
+            yield ": keepalive\n\n"
+            while True:
+                try:
+                    msg = await asyncio.wait_for(q.get(), timeout=25)
+                    yield msg
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        break
+                    yield ": keepalive\n\n"
+        finally:
+            try:
+                _sse_subscribers.remove(q)
+            except ValueError:
+                pass
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Posts ─────────────────────────────────────────────────────────────────────
@@ -607,7 +701,8 @@ def build_post_response(row: sqlite3.Row, viewer: str, conn: sqlite3.Connection 
 
     avatar_url = None
     if row["author_avatar_path"] and Path(row["author_avatar_path"]).exists():
-        avatar_url = f"{SERVER_BASE}/img/{row['tg_username']}.jpg"
+        t = int(row["updated_at"] or 0)
+        avatar_url = f"{SERVER_BASE}/img/{row['tg_username']}.jpg?t={t}"
 
     # реакции
     reactions: dict[str, int] = {}
@@ -653,7 +748,8 @@ POSTS_QUERY = """
            u.display_name, u.first_name, u.profile_username,
            u.avatar_path  AS author_avatar_path,
            u.is_premium   AS author_premium,
-           u.verified     AS author_verified
+           u.verified     AS author_verified,
+           u.updated_at   AS updated_at
     FROM posts p
     JOIN users u ON u.username = p.tg_username
 """
@@ -872,8 +968,9 @@ async def react_to_post(post_id: int, body: ReactRequest, username: str = Depend
 COMMENTS_QUERY = """
     SELECT c.*,
            u.display_name, u.first_name, u.profile_username,
-           u.avatar_path AS author_avatar_path,
-           u.verified    AS author_verified
+           u.avatar_path  AS author_avatar_path,
+           u.verified     AS author_verified,
+           u.updated_at   AS updated_at
     FROM comments c
     JOIN users u ON u.username = c.tg_username
 """
@@ -892,7 +989,8 @@ def build_comment_response(row: sqlite3.Row, viewer: str, conn: sqlite3.Connecti
 
     avatar_url = None
     if row["author_avatar_path"] and Path(row["author_avatar_path"]).exists():
-        avatar_url = f"{SERVER_BASE}/img/{row['tg_username']}.jpg"
+        t = int(row["updated_at"] or 0)
+        avatar_url = f"{SERVER_BASE}/img/{row['tg_username']}.jpg?t={t}"
 
     return {
         "id":         row["id"],

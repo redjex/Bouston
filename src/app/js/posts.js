@@ -1100,7 +1100,10 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   if (post.author) {
     const a = post.author;
     profile   = { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
-    avatarSrc = a.avatarUrl || '../../img/default_avatar.png';
+    // Для своих постов используем локальный профиль — он актуален сразу после смены аватарки
+    avatarSrc  = post.isOwn
+      ? (getProfile().avatar || a.avatarUrl || '../../img/default_avatar.png')
+      : (a.avatarUrl || '../../img/default_avatar.png');
     isVerified = a.isVerified;
     badgeHtml  = isVerified
       ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
@@ -1113,6 +1116,8 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   const el = document.createElement('div');
   el.className = 'post post--enter' + extra;
   el.dataset.postId = post.id;
+  if (post.author) el.dataset.author = post.author.tgUsername;
+  else if (window._tgUsername) el.dataset.author = window._tgUsername;
   const delay = (i % 5) * 50;
   el.style.animationDelay = delay + 'ms';
   const verifiedGradientSvg = isVerified ? `
