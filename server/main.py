@@ -20,7 +20,7 @@ from aiogram.types import FSInputFile
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -455,7 +455,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 from fastapi.staticfiles import StaticFiles
+WEB_DIR     = BASE_DIR / "web"
+APP_IMG_DIR = BASE_DIR / "img"
 app.mount("/img", StaticFiles(directory=str(IMG_DIR)), name="img")
+app.mount("/web", StaticFiles(directory=str(WEB_DIR)), name="web")
+if APP_IMG_DIR.exists():
+    app.mount("/appimg", StaticFiles(directory=str(APP_IMG_DIR)), name="appimg")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1175,6 +1180,33 @@ async def delete_comment_endpoint(post_id: int, comment_id: int, username: str =
         conn.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
         conn.commit()
     return {"ok": True}
+
+
+@app.get("/api/emoji")
+async def list_emoji_web():
+    emoji_dir = APP_IMG_DIR / "emoji"
+    if not emoji_dir.exists():
+        return {}
+    result = {}
+    for f in sorted(emoji_dir.iterdir()):
+        if f.suffix == ".tgs":
+            emoji_char = _re.sub(r"^\d+_", "", f.stem)
+            result[emoji_char] = f"/appimg/emoji/{f.name}"
+    return result
+
+
+@app.get("/post/{post_id}", response_class=FileResponse)
+async def post_page(post_id: int):
+    return FileResponse(str(WEB_DIR / "post.html"))
+
+
+@app.get("/api/posts/{post_id}")
+async def get_single_post(post_id: int):
+    with get_db() as conn:
+        row = conn.execute(POSTS_QUERY + "WHERE p.id = ?", (post_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Пост не найден")
+        return build_post_response(row, "", conn)
 
 
 @app.post("/posts/{post_id}/comments/{comment_id}/like")

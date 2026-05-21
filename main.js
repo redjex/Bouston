@@ -1,6 +1,18 @@
 const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs   = require('fs');
+const { autoUpdater } = require('electron-updater');
+
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('update-downloaded', () => {
+  mainWindow?.webContents.send('update:ready');
+});
+
+ipcMain.on('update:install', () => {
+  autoUpdater.quitAndInstall();
+});
 
 app.commandLine.appendSwitch('enable-smooth-scrolling');
 app.commandLine.appendSwitch('enable-features', 'SmoothScrolling');
@@ -48,7 +60,7 @@ function createWindow() {
     icon: path.join(__dirname, 'img', 'logo_white.png'),
   });
 
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
   
   if (isApp) {
     mainWindow.setResizable(true);
@@ -138,7 +150,10 @@ ipcMain.on('auth:logout', () => {
   mainWindow?.loadFile(path.join(__dirname, 'src', 'index.html'));
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

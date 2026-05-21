@@ -16,13 +16,11 @@ function _renderUserCard(info) {
   const src = info.avatar_url || info.avatarUrl || '../../img/default_avatar.png';
   av.src = src;
 
-  if (info.banner_url) {
-    const bannerImg = document.getElementById('up-banner-img');
-    const bannerPH  = document.getElementById('up-banner-placeholder');
-    bannerImg.onload = () => bannerImg.classList.add('loaded');
-    bannerImg.src    = info.banner_url;
-    bannerPH.style.display = 'none';
-  }
+  const bannerImg = document.getElementById('up-banner-img');
+  const bannerPH  = document.getElementById('up-banner-placeholder');
+  bannerImg.onload = () => bannerImg.classList.add('loaded');
+  bannerImg.src    = info.banner_url || '../../img/baner.png';
+  bannerPH.style.display = 'none';
 }
 
 async function openUserProfile(tgUsername) {

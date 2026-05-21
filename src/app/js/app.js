@@ -158,3 +158,24 @@ checkAuth().then(ok => {
     connectEvents();
   });
 });
+
+/* ── Auto-updater overlay ────────────────────── */
+(function () {
+  const overlay = document.getElementById('update-overlay');
+  const btnInstall = document.getElementById('btn-update-install');
+  const btnLater   = document.getElementById('btn-update-later');
+
+  if (window.electronAPI?.onUpdateReady) {
+    window.electronAPI.onUpdateReady(() => {
+      overlay.classList.add('update-overlay--visible');
+    });
+  }
+
+  btnInstall.addEventListener('click', () => {
+    window.electronAPI?.installUpdate();
+  });
+
+  btnLater.addEventListener('click', () => {
+    overlay.classList.remove('update-overlay--visible');
+  });
+})();

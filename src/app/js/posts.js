@@ -471,43 +471,89 @@ function initComposePhoto(ns) {
   const previews = document.getElementById(`${ns}-compose-previews`);
   if (!input || !previews) return;
 
+  function addFile(file) {
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
+    const isVideo = file.type.startsWith('video/');
+    const reader  = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      _composeImages[ns].push({ src: dataUrl, type: isVideo ? 'video' : 'image', mime: file.type });
+
+      const wrap = document.createElement('div');
+      wrap.className = 'compose__preview-wrap';
+
+      if (isVideo) {
+        const vid = document.createElement('video');
+        vid.src = dataUrl;
+        vid.muted = true;
+        vid.playsInline = true;
+        wrap.appendChild(vid);
+      } else {
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        wrap.appendChild(img);
+      }
+
+      const rm = document.createElement('button');
+      rm.className = 'compose__preview-remove';
+      rm.textContent = '×';
+      rm.addEventListener('click', () => {
+        const idx = _composeImages[ns].findIndex(m => m.src === dataUrl);
+        if (idx !== -1) _composeImages[ns].splice(idx, 1);
+        wrap.remove();
+      });
+      wrap.appendChild(rm);
+      previews.appendChild(wrap);
+    };
+    reader.readAsDataURL(file);
+  }
+
   input.addEventListener('change', () => {
-    Array.from(input.files).forEach(file => {
-      const isVideo = file.type.startsWith('video/');
-      const reader  = new FileReader();
-      reader.onload = e => {
-        const dataUrl = e.target.result;
-        _composeImages[ns].push({ src: dataUrl, type: isVideo ? 'video' : 'image', mime: file.type });
-
-        const wrap = document.createElement('div');
-        wrap.className = 'compose__preview-wrap';
-
-        if (isVideo) {
-          const vid = document.createElement('video');
-          vid.src = dataUrl;
-          vid.muted = true;
-          vid.playsInline = true;
-          wrap.appendChild(vid);
-        } else {
-          const img = document.createElement('img');
-          img.src = dataUrl;
-          wrap.appendChild(img);
-        }
-
-        const rm = document.createElement('button');
-        rm.className = 'compose__preview-remove';
-        rm.textContent = '×';
-        rm.addEventListener('click', () => {
-          const idx = _composeImages[ns].findIndex(m => m.src === dataUrl);
-          if (idx !== -1) _composeImages[ns].splice(idx, 1);
-          wrap.remove();
-        });
-        wrap.appendChild(rm);
-        previews.appendChild(wrap);
-      };
-      reader.readAsDataURL(file);
-    });
+    Array.from(input.files).forEach(addFile);
     input.value = '';
+  });
+
+  // Ctrl+V paste
+  const composeEl = document.getElementById(`${ns}-compose-input`);
+  (composeEl || document).addEventListener('paste', e => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const mediaItems = Array.from(items).filter(i => i.kind === 'file' && (i.type.startsWith('image/') || i.type.startsWith('video/')));
+    if (!mediaItems.length) return;
+    e.preventDefault();
+    mediaItems.forEach(i => addFile(i.getAsFile()));
+  });
+
+  // Drag-and-drop на поле ввода
+  const composeInput = document.getElementById(`${ns}-compose-input`);
+  const dropZone = (composeInput || previews).closest('.compose') || previews;
+
+  let _dragCounter = 0;
+
+  dropZone.addEventListener('dragenter', e => {
+    e.preventDefault();
+    _dragCounter++;
+    dropZone.classList.add('compose--drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    _dragCounter--;
+    if (_dragCounter <= 0) {
+      _dragCounter = 0;
+      dropZone.classList.remove('compose--drag-over');
+    }
+  });
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    _dragCounter = 0;
+    dropZone.classList.remove('compose--drag-over');
+    Array.from(e.dataTransfer.files).forEach(addFile);
   });
 }
 
@@ -516,6 +562,52 @@ initComposePhoto('profile');
 
 watchComposeEmpty('feed-compose-input');
 watchComposeEmpty('profile-compose-input');
+
+/* ── Post context menu ──────────────────────── */
+(function () {
+  const menu    = document.getElementById('post-ctx-menu');
+  const btnCopy = document.getElementById('post-ctx-copy-link');
+  let _postId   = null;
+
+  function openMenu(x, y, postId) {
+    _postId = postId;
+    // Не дать меню выйти за правый/нижний край экрана
+    const mw = 200, mh = 60;
+    const px = x + mw > window.innerWidth  ? x - mw : x;
+    const py = y + mh > window.innerHeight ? y - mh : y;
+    menu.style.left = px + 'px';
+    menu.style.top  = py + 'px';
+    menu.classList.add('post-ctx-menu--visible');
+  }
+
+  function closeMenu() {
+    menu.classList.remove('post-ctx-menu--visible');
+    _postId = null;
+  }
+
+  // ПКМ на посте
+  document.addEventListener('contextmenu', e => {
+    const postEl = e.target.closest('.post[data-post-id]');
+    if (!postEl) { closeMenu(); return; }
+    e.preventDefault();
+    openMenu(e.clientX, e.clientY, postEl.dataset.postId);
+  });
+
+  // Закрыть при клике куда угодно
+  document.addEventListener('mousedown', e => {
+    if (!menu.contains(e.target)) closeMenu();
+  });
+
+  // Закрыть при скролле
+  document.addEventListener('scroll', closeMenu, true);
+
+  btnCopy.addEventListener('click', () => {
+    if (!_postId) return;
+    const url = `https://bouston.xyz/post/${_postId}`;
+    navigator.clipboard.writeText(url).catch(() => {});
+    closeMenu();
+  });
+})();
 
 /* ── Spam toast + button cooldown ──────────── */
 let _toastTimer = null;

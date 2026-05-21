@@ -236,12 +236,22 @@ body {
 /* ── compose ── */
 .compose {
     width: 440px;
-    background: #111;
     border-radius: 22px;
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    border: 2px solid transparent;
+    background:
+        linear-gradient(#111, #111) padding-box,
+        transparent border-box;
+    transition: background 0.15s ease;
+}
+
+.compose--drag-over {
+    background:
+        #161b2e padding-box,
+        linear-gradient(to right, #144CCC, #4E7ADF) border-box;
 }
 
 .compose__row {
@@ -2377,3 +2387,134 @@ body {
         transform: translateX(0);
     }
 }
+
+/* ── post context menu ── */
+.post-ctx-menu {
+    position: fixed;
+    z-index: 8000;
+    background: #1a1a1a;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 22px;
+    padding: 4px;
+    min-width: 190px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.95);
+    transform-origin: top left;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.post-ctx-menu--visible {
+    opacity: 1;
+    pointer-events: all;
+    transform: scale(1);
+}
+
+.post-ctx-menu__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: none;
+    background: none;
+    color: rgba(255,255,255,0.85);
+    font-family: 'Inter', sans-serif;
+    font-size: 1.35rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: color 0.15s ease;
+}
+
+.post-ctx-menu__item:hover {
+    color: rgba(255,255,255,0.4);
+}
+
+.post-ctx-menu__item svg {
+    flex-shrink: 0;
+}
+
+/* ── update overlay ── */
+.update-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(16px) brightness(0.6);
+    -webkit-backdrop-filter: blur(16px) brightness(0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.update-overlay--visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.update-card {
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    padding: 32px 28px 24px;
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transform: scale(0.94) translateY(10px);
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.update-overlay--visible .update-card {
+    transform: scale(1) translateY(0);
+}
+
+.update-card__title {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.update-card__sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 1.25rem;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.update-card__btns {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.update-card__btn-install {
+    width: 100%;
+    padding: 11px 0;
+    font-size: 1.3rem;
+}
+
+.update-card__btn-later {
+    width: 100%;
+    padding: 10px 0;
+    border-radius: 90px;
+    border: 1.5px solid rgba(255,255,255,0.25);
+    background: transparent;
+    color: #fff;
+    font-family: 'Unbounded', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.18s, opacity 0.18s;
+}
+
+.update-card__btn-later:hover  { border-color: rgba(255,255,255,0.5); }
+.update-card__btn-later:active { opacity: 0.65; }

@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAuthToken:   () => ipcRenderer.invoke('auth:get-token'),
   logout:         () => ipcRenderer.send('auth:logout'),
   openExternal:   (url) => ipcRenderer.send('shell:open', url),
-  listEmoji:    () => ipcRenderer.invoke('emoji:list'),
+  listEmoji:      () => ipcRenderer.invoke('emoji:list'),
+  onUpdateReady:  (cb) => ipcRenderer.on('update:ready', () => cb()),
+  installUpdate:  () => ipcRenderer.send('update:install'),
 });

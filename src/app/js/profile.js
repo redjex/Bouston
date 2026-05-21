@@ -35,8 +35,9 @@ function renderProfile() {
     bannerImg.classList.add('loaded');
     bannerPH.style.display = 'none';
   } else {
-    bannerImg.classList.remove('loaded');
-    bannerPH.style.display = 'flex';
+    bannerImg.src = '../../img/baner.png';
+    bannerImg.classList.add('loaded');
+    bannerPH.style.display = 'none';
   }
 
   document.getElementById('profile-name').textContent = p.name;
