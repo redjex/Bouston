@@ -77,8 +77,12 @@ async function initTgProfile() {
     // _tgUsername нужен всегда — устанавливаем до любых ранних выходов
     window._tgUsername = tgUser.username || null;
 
-    const p = getProfile();
-    if (p.tgSynced) return;
+    let p = getProfile();
+    // Если в кэше данные другого пользователя — сбрасываем
+    if (p.tgUsername && p.tgUsername !== tgUser.username) {
+      clearProfile();
+      p = getProfile();
+    }
 
     if (tgUser.first_name) {
       p.name = tgUser.last_name
@@ -87,7 +91,7 @@ async function initTgProfile() {
     }
     if (tgUser.profile_username) p.username = tgUser.profile_username;
     else if (tgUser.username) p.username = tgUser.username;
-    if (tgUser.bio) p.bio = tgUser.bio;
+    p.bio = tgUser.bio || 'Привет, я использую Bouston';
     if (tgUser.verified) p.verified = true;
     if (tgUser.avatar_b64) {
       p.avatar = tgUser.avatar_b64;
@@ -100,7 +104,17 @@ async function initTgProfile() {
         r.readAsDataURL(blob);
       });
     }
-    p.tgSynced = true;
+    // Запрашиваем banner_url с сервера — он не входит в tgUser
+    try {
+      const uRes = await fetch(`${API}/users/${tgUser.username}`);
+      if (uRes.ok) {
+        const uData = await uRes.json();
+        p.banner = uData.banner_url || null;
+      }
+    } catch {}
+
+    p.tgSynced   = true;
+    p.tgUsername = tgUser.username || null;
     saveProfile(p);
 
     const avatarSrc = p.avatar || '../../img/default_avatar.png';

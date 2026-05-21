@@ -97,10 +97,76 @@ function buildMedia(images) {
   return grid;
 }
 
+/* ── Text with inline animated emoji ── */
+const EMOJI_RE = /\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu;
+
+function buildTextNode(text, emojiMap) {
+  const p = document.createElement('p');
+  p.className = 'card__text';
+
+  const parts = [];
+  let last = 0;
+  for (const m of text.matchAll(EMOJI_RE)) {
+    if (m.index > last) parts.push({ type: 'text', value: text.slice(last, m.index) });
+    parts.push({ type: 'emoji', value: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
+
+  parts.forEach(part => {
+    if (part.type === 'text') {
+      p.appendChild(document.createTextNode(part.value));
+    } else {
+      const url = emojiMap[part.value];
+      if (url) {
+        const wrap = document.createElement('span');
+        wrap.className = 'inline-emoji';
+        fetchTgs(url).then(json => {
+          if (!wrap.isConnected) return;
+          lottie.loadAnimation({
+            container: wrap,
+            animationData: structuredClone(json),
+            renderer: 'svg',
+            loop: true,
+            autoplay: true,
+            rendererSettings: { preserveAspectRatio: 'xMidYMid meet' },
+          });
+        }).catch(() => {
+          wrap.textContent = part.value;
+        });
+        p.appendChild(wrap);
+      } else {
+        p.appendChild(document.createTextNode(part.value));
+      }
+    }
+  });
+
+  return p;
+}
+
 /* ── Reactions ── */
 function buildReactions(reactions, emojiMap) {
   const entries = Object.entries(reactions || {});
-  if (!entries.length) return null;
+  if (!entries.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'reactions-wrap';
+    const btn = document.createElement('div');
+    btn.className = 'btn-like';
+    const url = emojiMap['❤️'];
+    if (url) {
+      btn.appendChild(makeTgsPlayer(url));
+    } else {
+      const span = document.createElement('span');
+      span.style.cssText = 'font-size:13px;line-height:1;';
+      span.textContent = '❤️';
+      btn.appendChild(span);
+    }
+    const cnt = document.createElement('span');
+    cnt.textContent = '0';
+    btn.appendChild(cnt);
+    wrap.appendChild(btn);
+    return wrap;
+  }
 
   const wrap = document.createElement('div');
   wrap.className = 'reactions-wrap';
@@ -188,10 +254,7 @@ function render(post, emojiMap) {
 
   // Text
   if (post.text) {
-    const textEl = document.createElement('p');
-    textEl.className = 'card__text';
-    textEl.textContent = post.text;
-    card.appendChild(textEl);
+    card.appendChild(buildTextNode(post.text, emojiMap));
   }
 
   // Media

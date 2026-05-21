@@ -215,6 +215,8 @@ document.getElementById('confirm-logout-no').addEventListener('click', () => {
 document.getElementById('confirm-logout-yes').addEventListener('click', () => {
   document.getElementById('confirm-logout-overlay').setAttribute('hidden', '');
   closeModal();
+  clearProfile();
+  localStorage.clear();
   window.electronAPI?.logout();
 });
 

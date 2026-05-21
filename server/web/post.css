@@ -265,6 +265,15 @@ video.media-single { background: #000; }
   opacity: 0.28;
 }
 
+/* ── Inline animated emoji ── */
+.inline-emoji {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
 /* ── Skeleton ── */
 .skeleton {
   width: 100%;

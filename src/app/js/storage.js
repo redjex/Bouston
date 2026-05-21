@@ -55,6 +55,11 @@ function invalidateProfileCache() {
   _profileCache = null;
 }
 
+function clearProfile() {
+  _profileCache = null;
+  localStorage.removeItem(PROFILE_KEY);
+}
+
 const COMMENTS_KEY = 'bouston_comments';
 
 function getComments(postId) {
