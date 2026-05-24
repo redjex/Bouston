@@ -22,7 +22,7 @@ BANNERS_DIR   = IMG_DIR / "banners"
 DB_PATH       = BASE_DIR / "bouston.db"
 BANER_PATH    = BASE_DIR / "baner.png"
 CODE_PATH     = BASE_DIR / "code.png"
-WEB_DIR       = BASE_DIR / "web"
+WEB_DIR       = BASE_DIR.parent / "web"
 
 IMG_DIR.mkdir(exist_ok=True)
 POSTS_IMG_DIR.mkdir(exist_ok=True)

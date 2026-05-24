@@ -111,7 +111,25 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
         JWT_SECRET,
         algorithm=JWT_ALGO,
     )
-    return {"ok": True, "token": token}
+
+    user = await db_get_user(username)
+    t = int(user["updated_at"] or 0) if user else 0
+    avatar_url = f"{SERVER_BASE}/img/{username}.jpg?t={t}" if (user and user["avatar_path"] and Path(user["avatar_path"]).exists()) else None
+    banner_url = f"{SERVER_BASE}/img/banners/{username}.jpg?t={t}" if (user and user["banner_path"] and Path(user["banner_path"]).exists()) else None
+
+    return {
+        "ok": True,
+        "token": token,
+        "user": {
+            "username":         username,
+            "profile_username": user["profile_username"] or username if user else username,
+            "first_name":       user["first_name"] if user else None,
+            "bio":              user["bio"] if user else None,
+            "verified":         bool(user["verified"]) if user else False,
+            "avatar_url":       avatar_url,
+            "banner_url":       banner_url,
+        },
+    }
 
 
 @router.get("/users/{username}")

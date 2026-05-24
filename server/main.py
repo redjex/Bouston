@@ -14,8 +14,10 @@ from routes import comments, events, posts, users, web
 
 logging.basicConfig(level=logging.INFO)
 
-WEB_DIR     = BASE_DIR / "web"
-APP_IMG_DIR = BASE_DIR / "img"
+WEB_ROOT_DIR = BASE_DIR / "web"
+WEB_DIR      = BASE_DIR / "web" / "app"
+APP_IMG_DIR  = BASE_DIR / "web" / "app" / "img" / "icons"
+EMOJI_DIR    = BASE_DIR / "img" / "emoji"
 
 
 @asynccontextmanager
@@ -28,10 +30,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/img",    StaticFiles(directory=str(IMG_DIR)),     name="img")
-app.mount("/web",    StaticFiles(directory=str(WEB_DIR)),     name="web")
-if APP_IMG_DIR.exists():
-    app.mount("/appimg", StaticFiles(directory=str(APP_IMG_DIR)), name="appimg")
+app.mount("/img",      StaticFiles(directory=str(IMG_DIR)),          name="img")
+app.mount("/web/app", StaticFiles(directory=str(WEB_DIR)),          name="web-app")
+app.mount("/web",      StaticFiles(directory=str(WEB_ROOT_DIR)),     name="web")
+APP_IMG_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/appimg", StaticFiles(directory=str(APP_IMG_DIR)),  name="appimg")
+EMOJI_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/emoji",  StaticFiles(directory=str(EMOJI_DIR)),    name="emoji")
 
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(

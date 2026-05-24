@@ -1,14 +1,27 @@
 import re
 
-from fastapi import APIRouter
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Cookie, Request
+from fastapi.responses import FileResponse, RedirectResponse
 
 from config import BASE_DIR
 
 router = APIRouter()
 
 WEB_DIR     = BASE_DIR / "web"
-APP_IMG_DIR = BASE_DIR / "img"
+APP_IMG_DIR = BASE_DIR / "web" / "app" / "img" / "icons"
+EMOJI_DIR   = BASE_DIR / "img" / "emoji"
+
+
+@router.get("/")
+async def root():
+    return RedirectResponse(url="/app", status_code=302)
+
+
+@router.get("/app")
+async def app_page(bouston_token: str | None = Cookie(default=None)):
+    if bouston_token:
+        return FileResponse(str(WEB_DIR / "app" / "app.html"))
+    return FileResponse(str(WEB_DIR / "app" / "index.html"))
 
 
 @router.get("/post/{post_id}", response_class=FileResponse)
@@ -16,14 +29,25 @@ async def post_page(post_id: int):
     return FileResponse(str(WEB_DIR / "post.html"))
 
 
-@router.get("/api/emoji")
-async def list_emoji_web():
-    emoji_dir = APP_IMG_DIR / "emoji"
-    if not emoji_dir.exists():
-        return {}
-    result = {}
-    for f in sorted(emoji_dir.iterdir()):
+@router.get("/emoji")
+async def list_emoji():
+    if not EMOJI_DIR.exists():
+        return []
+    result = []
+    for f in sorted(EMOJI_DIR.iterdir()):
         if f.suffix == ".tgs":
             emoji_char = re.sub(r"^\d+_", "", f.stem)
-            result[emoji_char] = f"/appimg/emoji/{f.name}"
+            result.append({"file": f.name, "emoji": emoji_char})
+    return result
+
+
+@router.get("/api/emoji")
+async def list_emoji_web():
+    if not EMOJI_DIR.exists():
+        return {}
+    result = {}
+    for f in sorted(EMOJI_DIR.iterdir()):
+        if f.suffix == ".tgs":
+            emoji_char = re.sub(r"^\d+_", "", f.stem)
+            result[emoji_char] = f"/emoji/{f.name}"
     return result
