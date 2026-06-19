@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bounston</title>
+  <title>Bouston</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -31,7 +31,7 @@
 
   <div class="app" id="app">
 
-    <!-- ══════════════ ЭКРАН 1 — Юзернейм ══════════════ -->
+    <!-- ══════════════ ЭКРАН 1 — QR-код ══════════════ -->
     <section class="screen screen--active" id="screen-1" data-step="1">
 
       <div class="banner" id="banner-1">
@@ -82,23 +82,17 @@
             <span class="panel__title">Создать аккаунт</span>
           </div>
 
-          <div class="panel__form">
-            <label class="field__label" for="input-username">Юзернейм</label>
-            <div class="field__wrap">
-              <div class="field__bg"></div>
-              <div class="field__glow"></div>
-              <input
-                class="field__input"
-                id="input-username"
-                type="text"
-                placeholder="Username"
-                autocomplete="off"
-                spellcheck="false"
-              />
+          <div class="panel__qr">
+            <div class="panel__qr-wrap">
+              <img class="panel__qr-img" src="../img/qr.svg" alt="QR-код бота" />
             </div>
+            <a class="btn-tg" href="https://t.me/bouston_bot" target="_blank" id="btn-open-bot">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.26 13.447l-2.95-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.537-.194 1.006.131.883.11z"/></svg>
+              Открыть в Telegram
+            </a>
           </div>
 
-          <div class="panel__actions">
+          <div class="panel__actions panel__actions--qr">
             <button class="btn-theme" id="btn-theme-1" title="Сменить тему">
               <svg class="btn-theme__icon btn-theme__icon--moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               <span class="material-symbols-outlined btn-theme__icon btn-theme__icon--sun">light_mode</span>
@@ -115,7 +109,7 @@
     </section>
 
 
-    <!-- ══════════════ ЭКРАН 2 — Код подтверждения ══════════════ -->
+    <!-- ══════════════ ЭКРАН 2 — Юзернейм ══════════════ -->
     <section class="screen" id="screen-2" data-step="2">
 
       <div class="banner" id="banner-2">
@@ -161,7 +155,95 @@
       <div class="panel">
         <div class="panel__inner">
 
-          <button class="btn-back" id="btn-back" title="Назад">
+          <button class="btn-back" id="btn-back-2" title="Назад">
+            <span class="material-symbols-outlined">arrow_back_ios_new</span>
+          </button>
+
+          <div class="panel__header">
+            <span class="panel__badge">Beta 1.0</span>
+            <span class="panel__title">Создать аккаунт</span>
+          </div>
+
+          <div class="panel__form">
+            <label class="field__label" for="input-username">Юзернейм из Telegram</label>
+            <div class="field__wrap">
+              <div class="field__bg"></div>
+              <div class="field__glow"></div>
+              <input
+                class="field__input"
+                id="input-username"
+                type="text"
+                placeholder="Username"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+          </div>
+
+          <div class="panel__actions">
+            <button class="btn-theme" id="btn-theme-2" title="Сменить тему">
+              <svg class="btn-theme__icon btn-theme__icon--moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              <span class="material-symbols-outlined btn-theme__icon btn-theme__icon--sun">light_mode</span>
+            </button>
+            <button class="btn-next" id="btn-next-2">
+              <div class="btn-next__bg"></div>
+              <div class="btn-next__glow"></div>
+              <span class="btn-next__label">Дальше</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ══════════════ ЭКРАН 3 — Код подтверждения ══════════════ -->
+    <section class="screen" id="screen-3" data-step="3">
+
+      <div class="banner" id="banner-2">
+        <img
+          class="banner__img banner__img--light"
+          src="../img/register_baner_white.png"
+          alt=""
+          onerror="this.classList.add('banner__img--missing')"
+        />
+        <img
+          class="banner__img banner__img--dark"
+          src="../img/register_baner_dark.png"
+          alt=""
+          onerror="this.classList.add('banner__img--missing')"
+        />
+
+        <div class="banner__logo">
+          <img
+            src="../img/logo_white.png"
+            alt="Logo"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='block'"
+          />
+          <svg style="display:none;" viewBox="0 0 92 92" fill="none">
+            <path d="M18 18 L50 18 L74 46 L50 74 L18 46 Z" fill="white"/>
+            <path d="M50 18 L74 18 L74 46 Z" fill="rgba(255,255,255,0.55)"/>
+          </svg>
+        </div>
+
+        <div class="banner__text">
+          <div class="banner__chat">
+            <div class="sc-q">
+              <span class="sc-label">Пользователь</span>
+              <p class="sc-text"></p>
+            </div>
+            <div class="sc-a">
+              <span class="sc-label sc-label--ai">Bouston</span>
+              <p class="sc-text"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__inner">
+
+          <button class="btn-back" id="btn-back-3" title="Назад">
             <span class="material-symbols-outlined">arrow_back_ios_new</span>
           </button>
 
@@ -188,11 +270,11 @@
           </div>
 
           <div class="panel__actions">
-            <button class="btn-theme" id="btn-theme-2" title="Сменить тему">
+            <button class="btn-theme" id="btn-theme-3" title="Сменить тему">
               <svg class="btn-theme__icon btn-theme__icon--moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               <span class="material-symbols-outlined btn-theme__icon btn-theme__icon--sun">light_mode</span>
             </button>
-            <button class="btn-next" id="btn-next-2">
+            <button class="btn-next" id="btn-next-3">
               <div class="btn-next__bg"></div>
               <div class="btn-next__glow"></div>
               <span class="btn-next__label">Дальше</span>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bouston</title>
+  <base href="/web/app/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;800&family=Inter:wght@400;500;600&family=Geologica:wght@600&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/auth.css" />
+</head>
+<body>
+  <a class="auth-page-logo" href="#">
+    <img src="img/logo_white.png" alt="Bouston" />
+  </a>
+
+  <div class="auth-wrap">
+    <div class="auth-card" id="auth-card">
+
+      <!-- Step 1: QR + bot link -->
+      <div class="auth-step" id="step-1">
+        <h1 class="auth-title">Создать аккаунт</h1>
+
+        <div class="auth-qr-wrap">
+          <div class="auth-qr-box">
+            <img id="qr-img" src="img/qr.svg" alt="QR" />
+          </div>
+          <a class="auth-bot-link" id="btn-open-bot" href="https://t.me/bouston_bot?start=login" target="_blank" rel="noopener">Перейти в бота</a>
+        </div>
+      </div>
+
+      <!-- Step 2: username + code -->
+      <div class="auth-step auth-step--hidden" id="step-2">
+        <h1 class="auth-title">
+          <button class="auth-title-back" id="btn-back-2" aria-label="Назад">
+            <img src="img/back.svg" alt="Назад" />
+          </button>
+          Создать аккаунт
+        </h1>
+
+        <div class="auth-field-block">
+          <label class="auth-label" for="input-username">Юзернейм из Telegram</label>
+
+          <div class="auth-input-pill" id="input-username-pill">
+            <input
+              id="input-username"
+              type="text"
+              placeholder="@username"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <span class="auth-error" id="error-username"></span>
+
+          <div class="auth-code-reveal" id="code-reveal">
+            <label class="auth-label" for="input-code">Код подтверждения</label>
+            <div class="auth-input-pill" id="input-code-pill">
+              <input
+                id="input-code"
+                type="text"
+                placeholder="000000"
+                maxlength="6"
+                autocomplete="one-time-code"
+                spellcheck="false"
+                inputmode="text"
+              />
+            </div>
+            <div class="auth-progress-bar"><div class="auth-progress-fill" id="progress-3"></div></div>
+            <span class="auth-error" id="error-code"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom bar (shared) -->
+      <div class="auth-bottom">
+        <button class="auth-theme-btn" id="btn-theme" aria-label="Тема">
+          <svg id="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 1 0 9.79 9.79z"/></svg>
+          <svg id="icon-sun"  width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="auth-next-btn" id="btn-next">Далее</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const API = '';
+
+    if (localStorage.getItem('bouston_token')) {
+      window.location.href = '/app';
+    }
+
+    // ── Theme ──────────────────────────────────
+    const html = document.documentElement;
+    const savedTheme = localStorage.getItem('bouston_theme') || 'light';
+    html.dataset.theme = savedTheme;
+    updateThemeIcon(savedTheme);
+
+    document.getElementById('btn-theme').addEventListener('click', () => {
+      const next = html.dataset.theme === 'light' ? 'dark' : 'light';
+      html.dataset.theme = next;
+      localStorage.setItem('bouston_theme', next);
+      updateThemeIcon(next);
+    });
+
+    function updateThemeIcon(theme) {
+      document.getElementById('icon-moon').style.display = theme === 'light' ? '' : 'none';
+      document.getElementById('icon-sun').style.display  = theme === 'dark'  ? '' : 'none';
+    }
+
+    // ── State ──────────────────────────────────
+    let _step     = 1;
+    let _username = '';
+    let _codeSent = false;
+    let _resendTimer = null;
+
+    const steps = {
+      1: document.getElementById('step-1'),
+      2: document.getElementById('step-2'),
+    };
+
+    const codeReveal = document.getElementById('code-reveal');
+    const btnNext    = document.getElementById('btn-next');
+
+    function goStep(n) {
+      Object.values(steps).forEach(el => el.classList.add('auth-step--hidden'));
+      steps[n].classList.remove('auth-step--hidden');
+      _step = n;
+    }
+
+    function showCodeInput() {
+      codeReveal.classList.add('visible');
+      btnNext.textContent = 'Войти';
+    }
+
+    function hideCodeInput() {
+      codeReveal.classList.remove('visible');
+      _codeSent = false;
+      btnNext.textContent = 'Далее';
+      document.getElementById('input-code').value = '';
+      setProgress('progress-3', 0);
+      clearError('error-code');
+    }
+
+    // ── Error helpers ──────────────────────────
+    function showError(id, msg) {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+    function clearError(id) {
+      const el = document.getElementById(id);
+      el.textContent = '';
+      el.style.display = 'none';
+    }
+
+    // ── Progress fill ──────────────────────────
+    function setProgress(id, pct) {
+      const el = document.getElementById(id);
+      if (el) el.style.width = pct + '%';
+    }
+
+    const usernameInput = document.getElementById('input-username');
+
+    usernameInput.addEventListener('input', function () {
+      const raw = this.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
+      this.value = raw.length > 0 ? '@' + raw : '';
+      clearError('error-username');
+    });
+
+    document.getElementById('input-code').addEventListener('input', function () {
+      this.value = this.value.replace(/[^0-9A-Z]/gi, '').toUpperCase().slice(0, 6);
+      setProgress('progress-3', (this.value.length / 6) * 100);
+    });
+
+    // ── Send code ──────────────────────────────
+    async function sendCode(username) {
+      clearError('error-username');
+      btnNext.disabled = true;
+      btnNext.textContent = '...';
+      try {
+        const res = await fetch(`${API}/send-code`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || 'Ошибка сервера');
+        _username = username;
+        _codeSent = true;
+        showCodeInput();
+        document.getElementById('input-code').focus();
+        startResendTimer(300);
+      } catch (err) {
+        showError('error-username', err.message);
+      } finally {
+        btnNext.disabled = false;
+        btnNext.textContent = 'Войти';
+      }
+    }
+
+    // ── Resend timer ───────────────────────────
+    function startResendTimer(secs) {
+      clearInterval(_resendTimer);
+      let s = secs;
+      _resendTimer = setInterval(() => {
+        s--;
+        if (s <= 0) clearInterval(_resendTimer);
+      }, 1000);
+    }
+
+    // ── Verify code ────────────────────────────
+    async function verifyCode(code) {
+      clearError('error-code');
+      btnNext.disabled = true;
+      btnNext.textContent = '...';
+      try {
+        const res = await fetch(`${API}/verify-code`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: _username, code }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || 'Неверный код');
+        localStorage.setItem('bouston_token', data.token);
+        localStorage.setItem('bouston_user', JSON.stringify(data.user));
+        document.cookie = `bouston_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+        window.location.href = '/app';
+      } catch (err) {
+        showError('error-code', err.message);
+      } finally {
+        btnNext.disabled = false;
+        btnNext.textContent = 'Войти';
+      }
+    }
+
+    // ── Next button ────────────────────────────
+    btnNext.addEventListener('click', () => {
+      if (_step === 1) {
+        goStep(2);
+        document.getElementById('input-username').focus();
+      } else if (_step === 2) {
+        const val = document.getElementById('input-username').value.trim().replace(/^@/, '');
+        if (!val) { showError('error-username', 'Введи юзернейм'); return; }
+        if (val.length < 3) { showError('error-username', 'Минимум 3 символа'); return; }
+        const code = document.getElementById('input-code').value.trim();
+        if (_codeSent) {
+          if (code.length !== 6) { showError('error-code', 'Введи 6-значный код'); return; }
+          verifyCode(code);
+        } else {
+          sendCode(val);
+        }
+      }
+    });
+
+    // ── Back buttons ───────────────────────────
+    document.getElementById('btn-back-2').addEventListener('click', () => {
+      clearError('error-username');
+      hideCodeInput();
+      goStep(1);
+    });
+
+    // ── Enter key ──────────────────────────────
+    document.getElementById('input-username').addEventListener('keydown', e => {
+      if (e.key === 'Enter') btnNext.click();
+    });
+    document.getElementById('input-code').addEventListener('keydown', e => {
+      if (e.key === 'Enter') btnNext.click();
+    });
+
+  </script>
+</body>
+</html>

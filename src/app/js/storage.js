@@ -1,10 +1,25 @@
 'use strict';
 
+const API = 'https://bouston.xyz';
+
+async function apiFetch(url, options = {}) {
+  const token = await window.electronAPI?.getAuthToken();
+  if (token) {
+    options.headers = { ...options.headers, 'Authorization': 'Bearer ' + token };
+  }
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    window.electronAPI?.logout();
+    throw new Error('unauthorized');
+  }
+  return res;
+}
+
 const POSTS_KEY   = 'bouston_posts';
 const PROFILE_KEY = 'bouston_profile';
 const DEFAULT_PROFILE = {
-  name: 'Bouston', bio: 'Web & UI/UX Designer',
-  avatar: null, banner: null, verified: false,
+  name: 'Bouston', username: '', bio: 'Web & UI/UX Designer',
+  avatar: null, banner: '../../img/baner.png', verified: false,
 };
 
 let _postsCache   = null;
@@ -38,6 +53,11 @@ function saveProfile(profile) {
 
 function invalidateProfileCache() {
   _profileCache = null;
+}
+
+function clearProfile() {
+  _profileCache = null;
+  localStorage.removeItem(PROFILE_KEY);
 }
 
 const COMMENTS_KEY = 'bouston_comments';

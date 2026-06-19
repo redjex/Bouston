@@ -69,6 +69,7 @@
               <span class="profile-card__name" id="profile-name">Bouston</span>
               <img class="profile-card__verified" id="profile-verified-badge" src="../../img/verided.svg" alt="verified" style="display:none" />
             </div>
+            <span class="profile-card__username" id="profile-username"></span>
             <span class="profile-card__bio" id="profile-bio">Web &amp; UI/UX Designer</span>
           </div>
         </div>
@@ -124,23 +125,65 @@
             <input id="input-name" type="text" placeholder="Ваше имя" />
           </div>
           <div class="edit-field">
+            <label>Юзернейм</label>
+            <input id="input-username-profile" type="text" placeholder="@username" maxlength="21" />
+          </div>
+          <div class="edit-field">
             <label>Описание</label>
             <input id="input-bio" type="text" placeholder="Web &amp; UI/UX Designer" />
-          </div>
-          <div class="edit-field edit-field--toggle">
-            <label for="toggle-verified">Верификация</label>
-            <label class="toggle">
-              <input type="checkbox" id="toggle-verified" />
-              <span class="toggle__track"><span class="toggle__thumb"></span></span>
-            </label>
           </div>
         </div>
         <div class="edit-modal__footer">
           <button class="btn-save" id="btn-save">Сохранить</button>
+          <button class="btn-logout" id="btn-logout">Выйти</button>
         </div>
       </div>
     </div>
 
+  </div>
+
+  <!-- ══ VIEW: USER PROFILE (чужой профиль) ══════ -->
+  <div id="view-user-profile" class="view">
+    <div class="profile-wrap" id="user-profile-wrap">
+
+      <div class="profile-card" id="user-profile-card">
+        <div class="profile-card__banner">
+          <img class="profile-card__banner-img" id="up-banner-img" src="" alt="" />
+          <div class="profile-card__banner-placeholder" id="up-banner-placeholder"></div>
+          <button class="btn-banner-settings" id="btn-user-profile-back" title="Назад">
+            <img src="../../img/close.svg" alt="back" style="filter:brightness(0) invert(1);width:14px;height:14px" />
+          </button>
+        </div>
+        <div class="profile-card__avatar-section">
+          <div class="profile-card__avatar-wrap">
+            <img class="profile-card__avatar" id="up-avatar" src="../../img/logo_blue.png" alt="" />
+          </div>
+        </div>
+        <div class="profile-card__body">
+          <div class="profile-card__info">
+            <div class="profile-card__namerow">
+              <span class="profile-card__name" id="up-name">—</span>
+              <img class="profile-card__verified" id="up-verified-badge" src="../../img/verided.svg" alt="verified" style="display:none" />
+            </div>
+            <span class="profile-card__username" id="up-username"></span>
+            <span class="profile-card__bio" id="up-bio"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="up-posts-container"></div>
+
+    </div>
+  </div>
+
+  <!-- ══ Confirm logout ════════════════════════ -->
+  <div class="confirm-overlay" id="confirm-logout-overlay" hidden>
+    <div class="confirm-box">
+      <span class="confirm-box__title">Выйти?</span>
+      <span class="confirm-box__sub">Вы уверены, что хотите выйти из аккаунта?</span>
+      <button class="confirm-box__btn confirm-box__btn--yes" id="confirm-logout-yes">Выйти</button>
+      <button class="confirm-box__btn confirm-box__btn--no" id="confirm-logout-no">Отмена</button>
+    </div>
   </div>
 
   <!-- ══ Thread panel ══════════════════════════ -->
@@ -226,6 +269,26 @@
     </div>
   </div>
 
+  <!-- ══ Post context menu ════════════════════ -->
+  <div id="post-ctx-menu" class="post-ctx-menu">
+    <button class="post-ctx-menu__item" id="post-ctx-copy-link">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      Копировать ссылку
+    </button>
+  </div>
+
+  <!-- ══ Update overlay ═══════════════════════ -->
+  <div id="update-overlay" class="update-overlay">
+    <div class="update-card">
+      <p class="update-card__title">Доступно обновление</p>
+      <p class="update-card__sub">Новая версия загружена и готова к установке</p>
+      <div class="update-card__btns">
+        <button class="btn-post update-card__btn-install" id="btn-update-install">Обновить</button>
+        <button class="update-card__btn-later" id="btn-update-later">Позже</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ Shared ══════════════════════════════ -->
   <nav class="bottom-nav">
     <button class="nav-btn active" id="nav-home" title="Главная">
@@ -248,6 +311,7 @@
   <script src="js/feed.js"></script>
   <script src="js/profile.js"></script>
   <script src="js/thread.js"></script>
+  <script src="js/user-profile.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

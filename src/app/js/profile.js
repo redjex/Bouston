@@ -2,6 +2,26 @@
 
 const _profileWrap = document.getElementById('profile-wrap');
 
+/* ── Утилита: ссылки в bio ───────────────────── */
+function linkifyBio(text) {
+  if (!text) return '';
+  const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return escaped.replace(
+    /(?:https?:\/\/|www\.)[^\s<>"']+|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z]{2,})+(?:\/[^\s<>"']*)?/g,
+    url => {
+      const href = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+      return `<a class="bio-link" href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    }
+  );
+}
+
+document.getElementById('profile-bio').addEventListener('click', e => {
+  const a = e.target.closest('.bio-link');
+  if (!a) return;
+  e.preventDefault();
+  window.electronAPI?.openExternal(a.href);
+});
+
 /* ── Render card ─────────────────────────────── */
 function renderProfile() {
   const p = getProfile();
@@ -15,19 +35,21 @@ function renderProfile() {
     bannerImg.classList.add('loaded');
     bannerPH.style.display = 'none';
   } else {
-    bannerImg.classList.remove('loaded');
-    bannerPH.style.display = 'flex';
+    bannerImg.src = '../../img/baner.png';
+    bannerImg.classList.add('loaded');
+    bannerPH.style.display = 'none';
   }
 
-  document.getElementById('profile-name').textContent        = p.name;
-  document.getElementById('profile-bio').textContent         = p.bio;
+  document.getElementById('profile-name').textContent = p.name;
+  const usernameEl = document.getElementById('profile-username');
+  if (usernameEl) usernameEl.textContent = p.username ? '@' + p.username : '';
+  document.getElementById('profile-bio').innerHTML = linkifyBio(p.bio);
   const badge = document.getElementById('profile-verified-badge');
   if (badge) badge.style.display = p.verified ? 'inline-block' : 'none';
 
-  document.getElementById('input-name').value        = p.name;
-  document.getElementById('input-bio').value         = p.bio;
-  document.getElementById('toggle-verified').checked = !!p.verified;
-
+  document.getElementById('input-name').value             = p.name;
+  document.getElementById('input-username-profile').value = p.username ? '@' + p.username : '';
+  document.getElementById('input-bio').value              = p.bio;
   syncModalPreview('modal-avatar-preview', 'btn-pick-avatar', p.avatar || '../../img/logo_blue.png', true);
   if (p.banner) syncModalPreview('modal-banner-preview', 'btn-pick-banner', p.banner, false);
 
@@ -47,7 +69,6 @@ function syncModalPreview(imgId, btnId, src, alwaysShow) {
 }
 
 /* ── Render profile posts ───────────────────── */
-const PROFILE_PAGE = 5;
 let _profileObserver = null;
 
 function attachProfileMenu(container) {
@@ -61,26 +82,37 @@ function attachProfileMenu(container) {
       if (_openMenuId === id) { closeAllMenus(); return; }
       openPostMenu(id, postEl, _profileWrap, [
         { src: '../../img/trash.svg', action: () => { closeAllMenus(); deletePost(id, renderProfilePosts); } },
-        { src: '../../img/edit.svg',  action: () => { closeAllMenus(); startEditPost(id, postEl, renderProfilePosts); } },
         { src: '../../img/pin.svg',   action: () => { closeAllMenus(); pinPost(id, renderProfilePosts); } },
+        { src: '../../img/edit.svg',  action: () => { closeAllMenus(); startEditPost(id, postEl, renderProfilePosts); } },
         { src: '../../img/close.svg', action: () => closeAllMenus() },
       ]);
     });
   });
 }
 
-function renderProfilePosts() {
+async function renderProfilePosts() {
   closeAllMenus();
   if (_profileObserver) { _profileObserver.disconnect(); _profileObserver = null; }
 
-  const container  = document.getElementById('profile-posts-container');
-  const profile    = getProfile();
-  const posts      = getPosts();
-  const avatarSrc  = profile.avatar || '../../img/logo_blue.png';
-  const isVerified = profile.verified === true;
-  const badgeHtml  = isVerified
-    ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
-    : '';
+  const container = document.getElementById('profile-posts-container');
+  const u = window._tgUsername;
+
+  if (!u) {
+    container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
+    return;
+  }
+
+  container.innerHTML = '<p class="feed__empty">Загрузка...</p>';
+
+  let posts;
+  try {
+    const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(u)}&limit=100`);
+    if (!res.ok) throw new Error();
+    posts = await res.json();
+  } catch {
+    container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
+    return;
+  }
 
   if (!posts.length) {
     container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
@@ -88,60 +120,33 @@ function renderProfilePosts() {
   }
 
   container.innerHTML = '';
-
-  const sorted = [...posts].sort((a, b) => {
-    if (a.pinned && b.pinned) return (b.pinnedAt || 0) - (a.pinnedAt || 0);
-    if (a.pinned) return -1;
-    if (b.pinned) return  1;
-    return 0;
-  });
-
-  let rendered = 0;
   let lastDateKey = null;
-
-  function renderBatch() {
-    const batch = sorted.slice(rendered, rendered + PROFILE_PAGE);
-    batch.forEach((post, i) => {
-      const ts = post.createdAt || post.id;
-      const dateKey = getDateKey(ts);
-      if (dateKey !== lastDateKey) {
-        container.appendChild(buildDateSeparator(ts));
-        lastDateKey = dateKey;
-      }
-      container.appendChild(buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, rendered + i, true));
-    });
-    rendered += batch.length;
-    attachProfileMenu(container);
-
-    const sentinel = container.querySelector('.feed-sentinel');
-    if (sentinel) sentinel.remove();
-
-    if (rendered < sorted.length) {
-      const s = document.createElement('div');
-      s.className = 'feed-sentinel';
-      container.appendChild(s);
-      _profileObserver = new IntersectionObserver(([e]) => {
-        if (e.isIntersecting) { _profileObserver.disconnect(); renderBatch(); }
-      }, { rootMargin: '200px' });
-      _profileObserver.observe(s);
+  posts.forEach((post, i) => {
+    registerServerPost(post);
+    const ts = post.createdAt || post.id;
+    const dateKey = getDateKey(ts);
+    if (dateKey !== lastDateKey) {
+      container.appendChild(buildDateSeparator(ts));
+      lastDateKey = dateKey;
     }
-  }
-
-  renderBatch();
+    container.appendChild(buildPostEl(post, null, null, false, '', i, true));
+  });
+  attachProfileMenu(container);
 }
 
 /* ── Modal ───────────────────────────────────── */
-let _pendingAvatar = undefined;
-let _pendingBanner = undefined;
+let _pendingAvatar   = undefined;
+let _pendingBanner   = undefined;
+let _originalUsername = '';
 
 function openModal() {
   _pendingAvatar = undefined;
   _pendingBanner = undefined;
   const p = getProfile();
-  document.getElementById('input-name').value        = p.name;
-  document.getElementById('input-bio').value         = p.bio;
-  document.getElementById('toggle-verified').checked = !!p.verified;
-
+  _originalUsername = p.username || '';
+  document.getElementById('input-name').value             = p.name;
+  document.getElementById('input-username-profile').value = p.username ? '@' + p.username : '';
+  document.getElementById('input-bio').value              = p.bio;
   const avatarImg = document.getElementById('modal-avatar-preview');
   avatarImg.src = p.avatar || '../../img/logo_blue.png';
   avatarImg.style.display = 'block';
@@ -161,6 +166,7 @@ function closeModal() {
   document.getElementById('edit-modal').setAttribute('hidden', '');
   _pendingAvatar = undefined;
   _pendingBanner = undefined;
+  clearFieldError('input-username-profile');
 }
 
 function pickImage(onLoad) {
@@ -176,16 +182,50 @@ function pickImage(onLoad) {
   input.click();
 }
 
+function showFieldError(inputId, message) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.classList.add('input--error');
+  inp.addEventListener('animationend', () => inp.classList.remove('input--error'), { once: true });
+  const field = inp.closest('.edit-field');
+  if (!field) return;
+  clearFieldError(inputId);
+  const err = document.createElement('span');
+  err.className = 'edit-field__error';
+  err.dataset.for = inputId;
+  err.textContent = message;
+  field.appendChild(err);
+}
+
+function clearFieldError(inputId) {
+  document.querySelectorAll(`.edit-field__error[data-for="${inputId}"]`).forEach(e => e.remove());
+}
+
 document.getElementById('btn-banner-settings').addEventListener('click', openModal);
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 
-document.getElementById('input-name').addEventListener('input', function () {
-  const pos = this.selectionStart;
-  const cleaned = this.value.replace(/[^a-zA-Z0-9_-]/g, '');
-  if (this.value !== cleaned) {
-    this.value = cleaned;
-    this.setSelectionRange(pos - 1, pos - 1);
-  }
+document.getElementById('btn-logout').addEventListener('click', () => {
+  document.getElementById('confirm-logout-overlay').removeAttribute('hidden');
+});
+
+document.getElementById('confirm-logout-no').addEventListener('click', () => {
+  document.getElementById('confirm-logout-overlay').setAttribute('hidden', '');
+});
+
+document.getElementById('confirm-logout-yes').addEventListener('click', () => {
+  document.getElementById('confirm-logout-overlay').setAttribute('hidden', '');
+  closeModal();
+  clearProfile();
+  localStorage.clear();
+  window.electronAPI?.logout();
+});
+
+document.getElementById('input-username-profile').addEventListener('input', function () {
+  let val = this.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
+  if (!val) { this.value = ''; return; }
+  this.value = '@' + val;
+  const pos = this.value.length;
+  this.setSelectionRange(pos, pos);
 });
 
 document.getElementById('btn-pick-avatar').addEventListener('click', () => {
@@ -206,32 +246,151 @@ document.getElementById('btn-pick-banner').addEventListener('click', () => {
   });
 });
 
-document.getElementById('btn-save').addEventListener('click', () => {
-  const p = getProfile();
-  p.name     = document.getElementById('input-name').value.trim()  || p.name;
-  p.bio      = document.getElementById('input-bio').value.trim()   || p.bio;
-  p.verified = document.getElementById('toggle-verified').checked;
-  if (_pendingAvatar !== undefined) p.avatar = _pendingAvatar;
-  if (_pendingBanner !== undefined) p.banner = _pendingBanner;
+document.getElementById('btn-save').addEventListener('click', async () => {
+  const p        = getProfile();
+  const newName  = document.getElementById('input-name').value.trim();
+  const newUser  = document.getElementById('input-username-profile').value.trim().replace(/^@/, '');
+  const newBio   = document.getElementById('input-bio').value.trim();
+  const newAvatar  = _pendingAvatar;
+  const newBanner  = _pendingBanner;
+
+  // ── Клиентская валидация юзернейма ──────────────────
+  if (newUser) {
+    if (newUser.length < 3) {
+      showFieldError('input-username-profile', 'Минимум 3 символа');
+      return;
+    }
+    if (newUser.length > 20) {
+      showFieldError('input-username-profile', 'Максимум 20 символов');
+      return;
+    }
+  }
+  clearFieldError('input-username-profile');
+
+  const usernameChanged = newUser !== _originalUsername;
+
+  // ── Если юзернейм меняется — сначала проверяем на сервере ──
+  if (usernameChanged) {
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    try {
+      const tgUser = await window.electronAPI?.getTgUser();
+      if (tgUser?.username) {
+        const res = await apiFetch('https://bouston.xyz/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tg_username:      tgUser.username,
+            display_name:     newName || p.name,
+            profile_username: newUser || null,
+            bio:              newBio  || p.bio,
+            avatar_b64:       newAvatar !== undefined ? newAvatar : null,
+            banner_b64:       newBanner !== undefined ? newBanner : null,
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          showFieldError('input-username-profile', d.detail || 'Ошибка сервера');
+          return;
+        }
+
+        // Сервер одобрил — мгновенно обновляем @handle на всех постах
+        if (newUser && window._tgUsername) {
+          const handle = '@' + newUser.toLowerCase();
+          document.querySelectorAll(`[data-author="${window._tgUsername}"] .post__handle`).forEach(el => {
+            el.textContent = handle;
+          });
+        }
+      }
+    } catch (err) {
+      if (err.message !== 'unauthorized') showFieldError('input-username-profile', 'Нет соединения с сервером');
+      return;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ── Сервер ок (или юзернейм не менялся) — применяем локально ──
+  p.name = newName || p.name;
+  p.username = newUser || p.username;
+  p.bio      = newBio  || p.bio;
+  if (newAvatar !== undefined) p.avatar = newAvatar;
+  if (newBanner  !== undefined) p.banner = newBanner;
+
   invalidateProfileCache();
   saveProfile(p);
   closeModal();
   renderProfile();
   refreshPostsVerifiedState(p.verified);
+
+  if (window._tgUsername) {
+    if (newAvatar !== undefined) {
+      document.querySelectorAll(`[data-author="${window._tgUsername}"] .avatar`).forEach(img => {
+        img.src = newAvatar;
+      });
+    }
+    document.querySelectorAll(`[data-author="${window._tgUsername}"] .post__name`).forEach(el => {
+      el.textContent = p.name;
+    });
+    document.querySelectorAll(`[data-author="${window._tgUsername}"] .comment__name`).forEach(el => {
+      el.textContent = p.name;
+    });
+  }
+
+  // ── Если юзернейм не менялся — шлём остальные изменения на сервер ──
+  if (!usernameChanged) {
+    try {
+      const tgUser = await window.electronAPI?.getTgUser();
+      if (tgUser?.username) {
+        await apiFetch('https://bouston.xyz/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tg_username: tgUser.username,
+            display_name: p.name,
+            bio:          p.bio,
+            avatar_b64:   newAvatar !== undefined ? newAvatar : null,
+            banner_b64:   newBanner !== undefined ? newBanner : null,
+          }),
+        });
+      }
+    } catch {}
+  }
 });
 
 /* ── Profile compose ─────────────────────────── */
-document.getElementById('profile-btn-post').addEventListener('click', () => {
+document.getElementById('profile-btn-post').addEventListener('click', async () => {
   const text   = getComposeText('profile-compose-input').trim();
   const images = getComposeImages('profile');
   if (!text && !images.length) return;
-  const now = Date.now();
-  const posts = getPosts();
-  posts.unshift({ id: now, text, images, likes: 0, liked: false, createdAt: now });
-  savePosts(posts);
-  clearComposeInput('profile-compose-input');
-  clearComposeImages('profile');
-  renderProfilePosts();
+
+  const btn = document.getElementById('profile-btn-post');
+  btn.disabled = true;
+
+  try {
+    const u = window._tgUsername;
+    if (!u) throw new Error('not logged in');
+
+    const res = await apiFetch(`${API}/posts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        images: images.map(m => m.src),
+      }),
+    });
+    if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
+
+    clearComposeInput('profile-compose-input');
+    clearComposeImages('profile');
+    renderProfilePosts();
+  } catch (err) {
+    if (err.message === 'unauthorized') return;
+    showPostError(err.message, btn);
+  } finally {
+    if (!btn.textContent.match(/^\d+с$/)) btn.disabled = false;
+  }
 });
 
 document.getElementById('profile-compose-input').addEventListener('keydown', e => {

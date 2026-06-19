@@ -1,20 +1,60 @@
 {
-  "name": "register-app",
-  "version": "1.0.0",
-  "description": "Registration window — Electron app",
+  "name": "bouston",
+  "version": "1.1.0",
+  "description": "Bouston",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "build": "electron-builder --win --x64"
   },
   "keywords": [],
-  "author": "",
+  "author": "redjex",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^42.0.1"
+    "electron": "^42.0.1",
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "lottie-web": "^5.13.0",
     "pako": "^2.1.0"
+  },
+  "build": {
+    "appId": "com.bouston.app",
+    "productName": "Bouston",
+    "icon": "img/logo.ico",
+    "publish": {
+      "provider": "github",
+      "owner": "redjex",
+      "repo": "Bouston"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "img/logo.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "installerIcon": "img/logo.ico",
+      "uninstallerIcon": "img/logo.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "files": [
+      "**/*",
+      "!server/**",
+      "!server/.env",
+      "!.env",
+      "!.git/**",
+      "!.claude/**",
+      "!*.md",
+      "!.gitignore",
+      "!electron",
+      "!data.json",
+      "!img/ProxifierSetup.exe"
+    ],
+    "directories": {
+      "output": "build"
+    }
   }
 }
