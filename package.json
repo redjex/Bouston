@@ -12,8 +12,8 @@
   "author": "redjex",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^42.0.1",
-    "electron-builder": "^25.1.8"
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "electron-updater": "^6.8.3",

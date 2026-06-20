@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Inter:wght@400;500;600;700&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=photo_camera" />
-  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/app.css?v=mobile-20260619-16" />
 </head>
 <body>
 
@@ -195,8 +195,13 @@
       </div>
       <div class="thread-panel__compose">
         <img class="avatar" id="thread-compose-avatar" src="/appimg/default_avatar.png" alt="" />
-        <textarea class="compose__input thread-compose__input" id="thread-compose-input" rows="1" placeholder="Напишите ответ..."></textarea>
-        <button class="thread-compose__btn" id="thread-btn-post">↑</button>
+        <div class="thread-compose__field" id="thread-compose-field">
+          <textarea class="thread-compose__input" id="thread-compose-input" rows="1"></textarea>
+          <span class="thread-compose__placeholder">Напишите ответ...</span>
+        </div>
+        <button class="thread-compose__btn" id="thread-btn-post" aria-label="Отправить">
+          <img src="/appimg/up.svg" alt="" />
+        </button>
       </div>
     </div>
   </div>
@@ -285,11 +290,11 @@
   <script src="js/api.js"></script>
   <script src="js/tgs.js"></script>
   <script src="js/storage.js"></script>
-  <script src="js/posts.js"></script>
-  <script src="js/feed.js"></script>
-  <script src="js/profile.js"></script>
-  <script src="js/thread.js"></script>
-  <script src="js/user-profile.js"></script>
+  <script src="js/posts.js?v=mobile-20260619-16"></script>
+  <script src="js/feed.js?v=mobile-20260619-11"></script>
+  <script src="js/profile.js?v=mobile-20260619-11"></script>
+  <script src="js/thread.js?v=mobile-20260619-10"></script>
+  <script src="js/user-profile.js?v=mobile-20260619-11"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -265,6 +265,27 @@ document.getElementById('thread-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('thread-overlay')) closeThread();
 });
 
+function syncThreadComposeInput() {
+  const input = document.getElementById('thread-compose-input');
+  const field = document.getElementById('thread-compose-field');
+  const compose = input.closest('.thread-panel__compose');
+  const hasValue = input.value.length > 0;
+
+  input.style.height = '40px';
+  const nextHeight = Math.min(input.scrollHeight, 120);
+  const multiline = hasValue && (input.value.includes('\n') || nextHeight > 40);
+
+  if (multiline) {
+    input.style.height = `${nextHeight}px`;
+  } else {
+    input.style.height = '40px';
+  }
+
+  field?.classList.toggle('has-value', hasValue);
+  field?.classList.toggle('multiline', multiline);
+  compose?.classList.toggle('multiline', multiline);
+}
+
 document.getElementById('thread-btn-post').addEventListener('click', async () => {
   const input = document.getElementById('thread-compose-input');
   const text  = input.value.trim();
@@ -287,8 +308,7 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
       if (res.ok) {
         const newComment = await res.json();
         input.value = '';
-        input.style.height = 'auto';
-        input.closest('.thread-panel__compose')?.classList.remove('multiline');
+        syncThreadComposeInput();
         if (emptyMsg) emptyMsg.remove();
         container.appendChild(buildCommentEl(newComment, true));
         container.scrollTop = container.scrollHeight;
@@ -299,8 +319,7 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
     const id  = Date.now();
     saveComment(_threadPostId, text);
     input.value = '';
-    input.style.height = 'auto';
-    input.closest('.thread-panel__compose')?.classList.remove('multiline');
+    syncThreadComposeInput();
     const profile = getProfile();
     const mapped  = {
       id, text, createdAt: id, likesCount: 0, myLike: false, isOwn: true,
@@ -327,11 +346,10 @@ document.getElementById('thread-compose-input').addEventListener('keydown', e =>
 });
 
 document.getElementById('thread-compose-input').addEventListener('input', function () {
-  this.style.height = 'auto';
-  this.style.height = this.scrollHeight + 'px';
-  const compose = this.closest('.thread-panel__compose');
-  if (compose) compose.classList.toggle('multiline', this.scrollHeight > 40);
+  syncThreadComposeInput();
 });
+
+syncThreadComposeInput();
 
 document.addEventListener('click', () => {
   document.querySelectorAll('.comment-row--open').forEach(r => r.classList.remove('comment-row--open'));

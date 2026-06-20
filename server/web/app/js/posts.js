@@ -711,6 +711,7 @@ let _menuScrollCleanup = null;
 
 function closeAllMenus() {
   document.querySelectorAll('.post__menu').forEach(m => m.remove());
+  document.querySelectorAll('.post--menu-open').forEach(p => p.classList.remove('post--menu-open'));
   _openMenuId = null;
   if (_menuScrollCleanup) { _menuScrollCleanup(); _menuScrollCleanup = null; }
 }
@@ -719,12 +720,17 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   closeAllMenus();
   if (!getPostById(id)) return;
 
+  postEl.classList.add('post--menu-open');
+
   const menu = document.createElement('div');
   menu.className = 'post__menu';
+  let menuTrackRaf = null;
 
   function updatePos() {
     const r = postEl.getBoundingClientRect();
-    menu.style.left = (r.right + 8) + 'px';
+    const menuWidth = menu.offsetWidth || 55;
+    const left = Math.min(r.right + 8, window.innerWidth - menuWidth - 8);
+    menu.style.left = Math.max(8, left) + 'px';
     menu.style.top  = r.top + 'px';
   }
   updatePos();
@@ -733,6 +739,7 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   _menuScrollCleanup = () => {
     scrollContainer.removeEventListener('scroll', updatePos);
     window.removeEventListener('resize', updatePos);
+    if (menuTrackRaf) cancelAnimationFrame(menuTrackRaf);
   };
 
   menuItems.forEach(({ src, action }) => {
@@ -744,6 +751,14 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   });
 
   document.body.appendChild(menu);
+  const trackUntil = performance.now() + 280;
+  function trackMenuPosition() {
+    updatePos();
+    if (performance.now() < trackUntil) {
+      menuTrackRaf = requestAnimationFrame(trackMenuPosition);
+    }
+  }
+  menuTrackRaf = requestAnimationFrame(trackMenuPosition);
   _openMenuId = id;
 }
 

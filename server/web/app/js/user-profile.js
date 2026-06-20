@@ -78,7 +78,7 @@ async function openUserProfile(tgUsername) {
     const btn    = wrap.querySelector('.post__more');
     const id     = Number(btn.dataset.id);
     const postEl = wrap.closest('.post');
-    btn.addEventListener('click', e => {
+    wrap.addEventListener('click', e => {
       e.stopPropagation();
       if (_openMenuId === id) { closeAllMenus(); return; }
       openPostMenu(id, postEl, document.getElementById('user-profile-wrap'), [
