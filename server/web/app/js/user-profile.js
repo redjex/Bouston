@@ -39,6 +39,9 @@ async function openUserProfile(tgUsername) {
 
   showView('user-profile');
 
+  const cachedInfo = getCachedUserProfile(tgUsername);
+  if (cachedInfo) _renderUserCard(cachedInfo);
+
   let posts = [];
   try {
     const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(tgUsername)}&limit=100`);
@@ -49,8 +52,7 @@ async function openUserProfile(tgUsername) {
     _renderUserCard(posts[0].author);
   }
 
-  fetch(`${API}/users/${encodeURIComponent(tgUsername)}`)
-    .then(r => r.ok ? r.json() : null)
+  fetchUserProfileCached(tgUsername)
     .then(info => { if (info) _renderUserCard(info); })
     .catch(() => {});
 
@@ -99,6 +101,7 @@ function closeUserProfile() {
 document.getElementById('btn-user-profile-back').addEventListener('click', closeUserProfile);
 
 document.getElementById('nav-home').addEventListener('click',    () => { _userProfileFrom = 'feed'; });
+document.getElementById('nav-settings').addEventListener('click', () => { _userProfileFrom = 'settings'; });
 document.getElementById('nav-profile').addEventListener('click', () => { _userProfileFrom = 'profile'; });
 
 document.addEventListener('click', e => {

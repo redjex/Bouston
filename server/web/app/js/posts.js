@@ -767,6 +767,7 @@ function startEditPost(id, postEl, onDone) {
   const isServer = _serverPostsMap.has(id);
   const post = isServer ? _serverPostsMap.get(id) : getPosts().find(p => p.id === id);
   if (!post) return;
+  postEl.classList.add('post--editing');
 
   const textWrap = postEl.querySelector('.post__text-wrap') || postEl.querySelector('.post__text');
   const textarea = document.createElement('textarea');
@@ -1152,7 +1153,10 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
 
   const newlineCount = (post.text ? post.text.match(/\n/g) || [] : []).length;
   const hasImages = post.images && post.images.length > 0;
-  const isTall = isVerified && (hasImages || newlineCount >= 2 || (post.text && post.text.length > 150));
+  const hasPinnedLabel = showPin && post.pinned;
+  const reactionCount = Object.keys(post.reactions || {}).length;
+  const hasWrappedReactions = reactionCount > 3;
+  const isTall = isVerified && (hasPinnedLabel || hasImages || hasWrappedReactions || newlineCount >= 2 || (post.text && post.text.length > 150));
   const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : '';
   const el = document.createElement('div');
   el.className = 'post post--enter' + extra;
@@ -1230,6 +1234,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     if (!textEl) return;
     const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
     if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
+    if (isVerified && textEl.offsetHeight > lh * 2.8) el.classList.add('post--verified-tall');
   });
 
   return el;
@@ -1243,7 +1248,10 @@ function refreshPostsVerifiedState(isVerified) {
     const textEl = postEl.querySelector('.post__text');
     const text = textEl ? textEl.textContent : '';
     const newlineCount = (text.match(/\n/g) || []).length;
-    const isTall = isVerified && (newlineCount >= 2 || text.length > 150);
+    const hasPinnedLabel = !!postEl.querySelector('.post__pinned');
+    const reactionCount = postEl.querySelectorAll('.post__reactions .btn-like').length;
+    const hasWrappedReactions = reactionCount > 3;
+    const isTall = isVerified && (hasPinnedLabel || hasWrappedReactions || newlineCount >= 2 || text.length > 150);
 
     postEl.classList.toggle('post--verified', isVerified);
     postEl.classList.toggle('post--verified-tall', isVerified && isTall);

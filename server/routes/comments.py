@@ -6,7 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth import normalize, require_auth
 from config import DB_PATH, JWT_ALGO, JWT_SECRET, MAX_COMMENT_TEXT
-from database import COMMENTS_QUERY, build_comment_response, db_get_user, fetch_comment_extras
+from database import (
+    COMMENTS_QUERY, build_comment_response, db_get_user, db_touch_auth_session,
+    fetch_comment_extras,
+)
 from models import CreateCommentRequest
 
 router = APIRouter()
@@ -19,7 +22,10 @@ async def get_comments(post_id: int, request: Request):
     if auth_header.startswith("Bearer "):
         try:
             payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
-            viewer = payload.get("sub", "")
+            candidate = payload.get("sub", "")
+            session_id = payload.get("jti", "")
+            if candidate and session_id and await db_touch_auth_session(session_id, candidate):
+                viewer = candidate
         except jwt.PyJWTError:
             pass
 

@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from auth import check_post_rate, normalize, require_auth
 from config import DB_PATH, JWT_ALGO, JWT_SECRET, MAX_IMAGES, MAX_LIMIT, MAX_POST_TEXT, POSTS_IMG_DIR
 from database import (
-    POSTS_QUERY, build_post_response, db_get_user, fetch_post_extras,
+    POSTS_QUERY, build_post_response, db_get_user, db_touch_auth_session,
+    fetch_post_extras,
 )
 from models import CreatePostRequest, EditPostRequest, ReactRequest
 from sse import broadcast_event
@@ -32,7 +33,10 @@ async def get_posts(
     if auth_header.startswith("Bearer "):
         try:
             payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
-            viewer = payload.get("sub", "")
+            candidate = payload.get("sub", "")
+            session_id = payload.get("jti", "")
+            if candidate and session_id and await db_touch_auth_session(session_id, candidate):
+                viewer = candidate
         except jwt.PyJWTError:
             pass
 

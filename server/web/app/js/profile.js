@@ -297,6 +297,17 @@ document.getElementById('btn-save').addEventListener('click', async () => {
 
   invalidateProfileCache();
   saveProfile(p);
+  if (window._tgUsername) {
+    saveCachedUserProfile(window._tgUsername, {
+      username: window._tgUsername,
+      display_name: p.name,
+      profile_username: p.username,
+      bio: p.bio,
+      verified: p.verified,
+      avatar_url: p.avatar,
+      banner_url: p.banner,
+    });
+  }
   closeModal();
   renderProfile();
   refreshPostsVerifiedState(p.verified);

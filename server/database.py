@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from pathlib import Path
 
 import aiosqlite
@@ -104,6 +105,19 @@ async def init_db() -> None:
                 FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                id          TEXT PRIMARY KEY,
+                tg_username TEXT NOT NULL,
+                user_agent  TEXT,
+                ip          TEXT,
+                device      TEXT,
+                created_at  REAL NOT NULL,
+                last_seen_at REAL NOT NULL,
+                revoked_at  REAL,
+                FOREIGN KEY (tg_username) REFERENCES users(username) ON DELETE CASCADE
+            )
+        """)
         await conn.commit()
 
         await conn.execute("""
@@ -153,6 +167,98 @@ async def db_set_registered(username: str, avatar_path: str | None, bio: str | N
             (avatar_path, bio, now, username),
         )
         await conn.commit()
+
+
+def describe_user_agent(user_agent: str) -> str:
+    ua = user_agent or ""
+    browser = "Браузер"
+    os = "Устройство"
+
+    if "Edg/" in ua:
+        browser = "Microsoft Edge"
+    elif "OPR/" in ua:
+        browser = "Opera"
+    elif "Chrome/" in ua and "Edg/" not in ua:
+        browser = "Chrome"
+    elif "Firefox/" in ua:
+        browser = "Firefox"
+    elif "Safari/" in ua and "Chrome/" not in ua:
+        browser = "Safari"
+
+    if "Android" in ua:
+        os = "Android"
+    elif any(item in ua for item in ("iPhone", "iPad", "iPod")):
+        os = "iOS"
+    elif "Windows" in ua:
+        os = "Windows"
+    elif "Mac OS X" in ua or "Macintosh" in ua:
+        os = "macOS"
+    elif "Linux" in ua:
+        os = "Linux"
+
+    return f"{browser} на {os}"
+
+
+async def db_create_auth_session(username: str, user_agent: str, ip: str) -> str:
+    session_id = uuid.uuid4().hex
+    now = time.time()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """
+            INSERT INTO auth_sessions (id, tg_username, user_agent, ip, device, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (session_id, username, user_agent, ip, describe_user_agent(user_agent), now, now),
+        )
+        await conn.commit()
+    return session_id
+
+
+async def db_touch_auth_session(session_id: str, username: str) -> bool:
+    if not session_id:
+        return False
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            """
+            UPDATE auth_sessions
+            SET last_seen_at = ?
+            WHERE id = ? AND tg_username = ? AND revoked_at IS NULL
+            """,
+            (time.time(), session_id, username),
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
+
+async def db_list_auth_sessions(username: str) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """
+            SELECT id, device, ip, created_at, last_seen_at, revoked_at
+            FROM auth_sessions
+            WHERE tg_username = ? AND revoked_at IS NULL
+            ORDER BY last_seen_at DESC
+            LIMIT 30
+            """,
+            (username,),
+        )
+        rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def db_revoke_auth_session(username: str, session_id: str) -> bool:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            """
+            UPDATE auth_sessions
+            SET revoked_at = COALESCE(revoked_at, ?)
+            WHERE id = ? AND tg_username = ?
+            """,
+            (time.time(), session_id, username),
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
 
 
 def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_reactions: list, comment_count: int) -> dict:

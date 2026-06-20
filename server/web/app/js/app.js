@@ -8,46 +8,68 @@ function showView(name) {
   _currentView = name;
   document.getElementById('view-feed').classList.toggle('view--active', name === 'feed');
   document.getElementById('view-profile').classList.toggle('view--active', name === 'profile');
+  document.getElementById('view-settings').classList.toggle('view--active', name === 'settings');
   document.getElementById('view-user-profile').classList.toggle('view--active', name === 'user-profile');
   document.getElementById('nav-home').classList.toggle('active', name === 'feed');
+  document.getElementById('nav-settings').classList.toggle('active', name === 'settings');
   document.getElementById('nav-profile').classList.toggle('active', name === 'profile');
   if (name === 'feed') {
     renderFeedPosts();
-    _scrollTopBtn.classList.toggle('visible', _feedEl.scrollTop > 300);
+    setScrollTopVisible(_feedEl.scrollTop > 300);
   } else if (name === 'profile') {
     renderProfile();
     renderProfilePosts();
-    _scrollTopBtn.classList.toggle('visible', _profileWrap.scrollTop > 300);
+    setScrollTopVisible(_profileWrap.scrollTop > 300);
+  } else if (name === 'settings') {
+    renderSettings();
+    const settingsWrap = document.getElementById('settings-wrap');
+    setScrollTopVisible(settingsWrap.scrollTop > 300);
+  } else if (name === 'user-profile') {
+    setScrollTopVisible(document.getElementById('user-profile-wrap').scrollTop > 300);
   }
 }
 
 document.getElementById('nav-home').addEventListener('click', () => showView('feed'));
+document.getElementById('nav-settings').addEventListener('click', () => showView('settings'));
 document.getElementById('nav-profile').addEventListener('click', () => showView('profile'));
 
 /* ── Scroll to top ───────────────────────────── */
 const _scrollTopBtn = document.getElementById('btn-scroll-top');
 
+function setScrollTopVisible(visible) {
+  _scrollTopBtn.classList.toggle('visible', visible);
+  document.body.classList.toggle('scroll-top-visible', visible);
+}
+
 _feedEl.addEventListener('scroll', () => {
   if (_currentView === 'feed') {
-    _scrollTopBtn.classList.toggle('visible', _feedEl.scrollTop > 300);
+    setScrollTopVisible(_feedEl.scrollTop > 300);
     document.getElementById('view-feed').classList.toggle('view--scrolled', _feedEl.scrollTop > 10);
   }
 });
 _profileWrap.addEventListener('scroll', () => {
   if (_currentView === 'profile') {
-    _scrollTopBtn.classList.toggle('visible', _profileWrap.scrollTop > 300);
+    setScrollTopVisible(_profileWrap.scrollTop > 300);
     document.getElementById('view-profile').classList.toggle('view--scrolled', _profileWrap.scrollTop > 10);
+  }
+});
+document.getElementById('settings-wrap').addEventListener('scroll', () => {
+  if (_currentView === 'settings') {
+    const settingsWrap = document.getElementById('settings-wrap');
+    setScrollTopVisible(settingsWrap.scrollTop > 300);
+    document.getElementById('view-settings').classList.toggle('view--scrolled', settingsWrap.scrollTop > 10);
   }
 });
 document.getElementById('user-profile-wrap').addEventListener('scroll', () => {
   if (_currentView === 'user-profile') {
-    _scrollTopBtn.classList.toggle('visible', document.getElementById('user-profile-wrap').scrollTop > 300);
+    setScrollTopVisible(document.getElementById('user-profile-wrap').scrollTop > 300);
     document.getElementById('view-user-profile').classList.toggle('view--scrolled', document.getElementById('user-profile-wrap').scrollTop > 10);
   }
 });
 _scrollTopBtn.addEventListener('click', () => {
   if (_currentView === 'feed') _feedEl.scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'profile') _profileWrap.scrollTo({ top: 0, behavior: 'smooth' });
+  else if (_currentView === 'settings') document.getElementById('settings-wrap').scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'user-profile') document.getElementById('user-profile-wrap').scrollTo({ top: 0, behavior: 'smooth' });
 });
 
@@ -91,10 +113,21 @@ async function initTgProfile() {
       p.avatar = tgUser.avatar_url;
     }
 
-    try {
-      const uRes = await apiFetch(`${API}/users/${tgUser.username}`);
-      if (uRes.ok) {
-        const uData = await uRes.json();
+    if (!isProfileCacheFresh(p)) {
+      try {
+        const uData = await fetchUserProfileCached(tgUser.username, { force: true });
+        if (uData) {
+        if (uData.banner_url) p.banner = uData.banner_url;
+        if (uData.avatar_url && !tgUser.avatar_b64) p.avatar = uData.avatar_url;
+        if (uData.bio) p.bio = uData.bio;
+        if (uData.display_name) p.name = uData.display_name;
+        if (uData.profile_username) p.username = uData.profile_username;
+        if (uData.verified) p.verified = uData.verified;
+        }
+      } catch {}
+    } else {
+      const uData = getCachedUserProfile(tgUser.username);
+      if (uData) {
         if (uData.banner_url) p.banner = uData.banner_url;
         if (uData.avatar_url && !tgUser.avatar_b64) p.avatar = uData.avatar_url;
         if (uData.bio) p.bio = uData.bio;
@@ -102,7 +135,7 @@ async function initTgProfile() {
         if (uData.profile_username) p.username = uData.profile_username;
         if (uData.verified) p.verified = uData.verified;
       }
-    } catch {}
+    }
 
     p.tgSynced   = true;
     p.tgUsername = tgUser.username || null;

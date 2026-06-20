@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Inter:wght@400;500;600;700&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=photo_camera" />
-  <link rel="stylesheet" href="css/app.css?v=mobile-20260619-16" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=computer,photo_camera,smartphone" />
+  <link rel="stylesheet" href="css/app.css?v=mobile-20260620-16" />
 </head>
 <body>
 
@@ -134,6 +134,51 @@
     </div>
   </div>
 
+  <!-- VIEW: SETTINGS -->
+  <div id="view-settings" class="view">
+    <div class="settings-wrap" id="settings-wrap">
+      <section class="settings-profile" id="settings-profile">
+        <img class="settings-profile__avatar" id="settings-avatar" src="/appimg/default_avatar.png" alt="" />
+        <div class="settings-profile__info">
+          <div class="settings-profile__namerow">
+            <span class="settings-profile__name" id="settings-name">Bouston</span>
+            <img class="settings-profile__verified" id="settings-verified" src="/appimg/verided.svg" alt="" hidden />
+          </div>
+          <span class="settings-profile__username" id="settings-username"></span>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <div class="settings-section__head">
+          <span class="settings-section__title">Аккаунты</span>
+          <span class="settings-section__limit" id="settings-account-limit"></span>
+        </div>
+        <div class="accounts-list" id="settings-accounts-list"></div>
+        <button class="account-add" id="settings-add-account">
+          <span class="account-add__icon">+</span>
+          <span>Добавить аккаунт</span>
+        </button>
+      </section>
+
+      <section class="settings-section settings-section--privacy">
+        <button class="settings-action" id="settings-privacy-toggle" type="button">
+          <span class="settings-action__body">
+            <span class="settings-action__title">Конфиденциальность</span>
+            <span class="settings-action__sub">Активные входы</span>
+          </span>
+          <span class="settings-action__chevron">›</span>
+        </button>
+        <div class="privacy-panel" id="settings-privacy-panel" hidden>
+          <div class="privacy-panel__head">
+            <span class="privacy-panel__title">История входов</span>
+            <span class="privacy-panel__sub">Только активные устройства</span>
+          </div>
+          <div class="login-sessions" id="settings-login-sessions"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
   <!-- ══ VIEW: USER PROFILE ══════ -->
   <div id="view-user-profile" class="view">
     <div class="profile-wrap" id="user-profile-wrap">
@@ -174,6 +219,15 @@
       <span class="confirm-box__sub">Вы уверены, что хотите выйти из аккаунта?</span>
       <button class="confirm-box__btn confirm-box__btn--yes" id="confirm-logout-yes">Выйти</button>
       <button class="confirm-box__btn confirm-box__btn--no" id="confirm-logout-no">Отмена</button>
+    </div>
+  </div>
+
+  <div class="confirm-overlay" id="account-auth-overlay" hidden>
+    <div class="confirm-box account-auth-box">
+      <span class="confirm-box__title">Добавить аккаунт</span>
+      <span class="confirm-box__sub">Текущий аккаунт останется в списке. После этого откроется авторизация, где можно войти в другой Telegram-аккаунт.</span>
+      <button class="confirm-box__btn confirm-box__btn--yes" id="account-auth-continue">Продолжить</button>
+      <button class="confirm-box__btn confirm-box__btn--no" id="account-auth-cancel">Отмена</button>
     </div>
   </div>
 
@@ -276,6 +330,9 @@
     <button class="nav-btn active" id="nav-home" title="Главная">
       <img class="nav-icon" src="/appimg/home.svg" alt="home" />
     </button>
+    <button class="nav-btn" id="nav-settings" title="Настройки">
+      <img class="nav-icon" src="/appimg/settings.svg" alt="settings" />
+    </button>
     <button class="nav-btn" id="nav-profile" title="Профиль">
       <img class="nav-icon" src="/appimg/profile.svg" alt="profile" />
     </button>
@@ -289,12 +346,13 @@
   <script src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js"></script>
   <script src="js/api.js"></script>
   <script src="js/tgs.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/posts.js?v=mobile-20260619-16"></script>
+  <script src="js/storage.js?v=mobile-20260620-1"></script>
+  <script src="js/posts.js?v=mobile-20260620-6"></script>
   <script src="js/feed.js?v=mobile-20260619-11"></script>
-  <script src="js/profile.js?v=mobile-20260619-11"></script>
+  <script src="js/profile.js?v=mobile-20260620-1"></script>
   <script src="js/thread.js?v=mobile-20260619-10"></script>
-  <script src="js/user-profile.js?v=mobile-20260619-11"></script>
-  <script src="js/app.js"></script>
+  <script src="js/user-profile.js?v=mobile-20260620-7"></script>
+  <script src="js/settings.js?v=mobile-20260620-10"></script>
+  <script src="js/app.js?v=mobile-20260620-10"></script>
 </body>
 </html>

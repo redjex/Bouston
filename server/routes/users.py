@@ -17,7 +17,10 @@ from config import (
     MAX_AVATAR_BYTES, MAX_BIO_LEN, MAX_NAME_LEN, SEND_COOLDOWN, SERVER_BASE,
     USERNAME_RE,
 )
-from database import db_get_user, db_set_registered, db_upsert_user
+from database import (
+    db_create_auth_session, db_get_user, db_list_auth_sessions,
+    db_revoke_auth_session, db_set_registered, db_upsert_user,
+)
 from models import SendCodeRequest, UpdateProfileRequest, UserInfoRequest, VerifyCodeRequest
 from sse import broadcast_event
 
@@ -106,8 +109,13 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
     last_send.pop(username, None)
     ip_active_username.pop(ip, None)
 
+    session_id = await db_create_auth_session(
+        username,
+        request.headers.get("User-Agent", ""),
+        get_ip(request),
+    )
     token = jwt.encode(
-        {"sub": username, "exp": int(time.time()) + JWT_TTL},
+        {"sub": username, "jti": session_id, "exp": int(time.time()) + JWT_TTL},
         JWT_SECRET,
         algorithm=JWT_ALGO,
     )
@@ -120,6 +128,7 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
     return {
         "ok": True,
         "token": token,
+        "session_id": session_id,
         "user": {
             "username":         username,
             "profile_username": user["profile_username"] or username if user else username,
@@ -130,6 +139,42 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
             "banner_url":       banner_url,
         },
     }
+
+
+@router.get("/auth/sessions")
+async def list_auth_sessions(request: Request, username: str = Depends(require_auth)):
+    auth_header = request.headers.get("Authorization", "")
+    current_id = ""
+    if auth_header.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
+            current_id = payload.get("jti", "")
+        except jwt.PyJWTError:
+            current_id = ""
+
+    sessions = await db_list_auth_sessions(username)
+    return {
+        "sessions": [
+            {
+                "id": s["id"],
+                "device": s["device"] or "Устройство",
+                "ip": s["ip"],
+                "createdAt": int(s["created_at"] * 1000),
+                "lastSeenAt": int(s["last_seen_at"] * 1000),
+                "revokedAt": int(s["revoked_at"] * 1000) if s["revoked_at"] else None,
+                "active": s["revoked_at"] is None,
+                "current": s["id"] == current_id,
+            }
+            for s in sessions
+        ]
+    }
+
+
+@router.delete("/auth/sessions/{session_id}")
+async def revoke_auth_session(session_id: str, username: str = Depends(require_auth)):
+    if not await db_revoke_auth_session(username, session_id):
+        raise HTTPException(404, "Сессия не найдена")
+    return {"ok": True}
 
 
 @router.get("/users/{username}")
