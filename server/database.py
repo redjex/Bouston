@@ -60,6 +60,10 @@ async def init_db() -> None:
         if 'profile_username' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN profile_username TEXT")
         if 'verified'         not in cols: await conn.execute("ALTER TABLE users ADD COLUMN verified         INTEGER DEFAULT 0")
         if 'banner_path'      not in cols: await conn.execute("ALTER TABLE users ADD COLUMN banner_path      TEXT")
+        if 'wallpaper_path'   not in cols: await conn.execute("ALTER TABLE users ADD COLUMN wallpaper_path   TEXT")
+        if 'gradients_enabled' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN gradients_enabled INTEGER DEFAULT 1")
+        if 'gradient_color_1' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN gradient_color_1 TEXT DEFAULT '#4E7ADF'")
+        if 'gradient_color_2' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN gradient_color_2 TEXT DEFAULT '#144CCC'")
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS posts (
@@ -137,6 +141,16 @@ async def db_upsert_user(
 ) -> None:
     now = time.time()
     async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute("""
+            UPDATE users
+            SET username = ?, chat_id = ?, first_name = ?, last_name = ?,
+                is_premium = ?, updated_at = ?
+            WHERE user_id = ?
+        """, (username, chat_id, first_name, last_name, int(is_premium), now, user_id))
+        if cursor.rowcount:
+            await conn.commit()
+            return
+
         await conn.execute("""
             INSERT INTO users (username, user_id, chat_id, first_name, last_name,
                                is_premium, registered, created_at, updated_at)

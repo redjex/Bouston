@@ -1,4 +1,5 @@
 import base64
+import re
 import time
 from pathlib import Path
 
@@ -21,10 +22,43 @@ from database import (
     db_create_auth_session, db_get_user, db_list_auth_sessions,
     db_revoke_auth_session, db_set_registered, db_upsert_user,
 )
-from models import SendCodeRequest, UpdateProfileRequest, UserInfoRequest, VerifyCodeRequest
+from models import SendCodeRequest, UpdateCustomizationRequest, UpdateProfileRequest, UserInfoRequest, VerifyCodeRequest
 from sse import broadcast_event
 
 router = APIRouter()
+
+WALLPAPERS_DIR = IMG_DIR / "wallpapers"
+WALLPAPERS_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_AVATAR_URL = "/appimg/default_avatar.png"
+DEFAULT_BANNER_URL = "/appimg/baner.png"
+
+
+def _customization_payload(user, username: str) -> dict:
+    t = int(user["updated_at"] or 0)
+    wallpaper_url = None
+    if "wallpaper_path" in user.keys() and user["wallpaper_path"] and Path(user["wallpaper_path"]).exists():
+        wallpaper_url = f"{SERVER_BASE}/img/wallpapers/{username}.jpg?t={t}"
+    return {
+        "gradients_enabled": bool(user["gradients_enabled"]) if "gradients_enabled" in user.keys() and user["gradients_enabled"] is not None else True,
+        "gradient_color_1": user["gradient_color_1"] if "gradient_color_1" in user.keys() and user["gradient_color_1"] else "#4E7ADF",
+        "gradient_color_2": user["gradient_color_2"] if "gradient_color_2" in user.keys() and user["gradient_color_2"] else "#144CCC",
+        "wallpaper_url": wallpaper_url,
+    }
+
+
+async def _ensure_customization_schema() -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute("PRAGMA table_info(users)")
+        cols = [r[1] for r in await cursor.fetchall()]
+        if 'wallpaper_path' not in cols:
+            await conn.execute("ALTER TABLE users ADD COLUMN wallpaper_path TEXT")
+        if 'gradients_enabled' not in cols:
+            await conn.execute("ALTER TABLE users ADD COLUMN gradients_enabled INTEGER DEFAULT 1")
+        if 'gradient_color_1' not in cols:
+            await conn.execute("ALTER TABLE users ADD COLUMN gradient_color_1 TEXT DEFAULT '#4E7ADF'")
+        if 'gradient_color_2' not in cols:
+            await conn.execute("ALTER TABLE users ADD COLUMN gradient_color_2 TEXT DEFAULT '#144CCC'")
+        await conn.commit()
 
 
 @router.post("/send-code")
@@ -122,8 +156,8 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
 
     user = await db_get_user(username)
     t = int(user["updated_at"] or 0) if user else 0
-    avatar_url = f"{SERVER_BASE}/img/{username}.jpg?t={t}" if (user and user["avatar_path"] and Path(user["avatar_path"]).exists()) else None
-    banner_url = f"{SERVER_BASE}/img/banners/{username}.jpg?t={t}" if (user and user["banner_path"] and Path(user["banner_path"]).exists()) else None
+    avatar_url = f"{SERVER_BASE}/img/{username}.jpg?t={t}" if (user and user["avatar_path"] and Path(user["avatar_path"]).exists()) else DEFAULT_AVATAR_URL
+    banner_url = f"{SERVER_BASE}/img/banners/{username}.jpg?t={t}" if (user and user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
 
     return {
         "ok": True,
@@ -185,8 +219,8 @@ async def get_user_fast(username: str):
         raise HTTPException(404, "Пользователь не найден")
 
     t          = int(user["updated_at"] or 0)
-    avatar_url = f"{SERVER_BASE}/img/{u}.jpg?t={t}" if (user["avatar_path"] and Path(user["avatar_path"]).exists()) else None
-    banner_url = f"{SERVER_BASE}/img/banners/{u}.jpg?t={t}" if (user["banner_path"] and Path(user["banner_path"]).exists()) else None
+    avatar_url = f"{SERVER_BASE}/img/{u}.jpg?t={t}" if (user["avatar_path"] and Path(user["avatar_path"]).exists()) else DEFAULT_AVATAR_URL
+    banner_url = f"{SERVER_BASE}/img/banners/{u}.jpg?t={t}" if (user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
 
     return {
         "username":         user["username"],
@@ -239,6 +273,78 @@ async def get_user_info(body: UserInfoRequest):
         "registered":       True,
         "avatar_b64":       avatar_b64,
     }
+
+
+@router.get("/profile/customization")
+async def get_profile_customization(username: str = Depends(require_auth)):
+    await _ensure_customization_schema()
+    user = await db_get_user(username)
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    return _customization_payload(user, username)
+
+
+@router.put("/profile/customization")
+async def update_profile_customization(body: UpdateCustomizationRequest, username: str = Depends(require_auth)):
+    await _ensure_customization_schema()
+    user = await db_get_user(username)
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    if not bool(user["verified"]):
+        raise HTTPException(403, "Синхронизация кастомизации доступна только verified")
+
+    def normalize_color(value: str | None, fallback: str) -> str:
+        if value is None:
+            return fallback
+        value = value.strip()
+        if not re.match(r"^#[0-9a-fA-F]{6}$", value):
+            raise HTTPException(400, "Цвет должен быть в формате #RRGGBB")
+        return value.upper()
+
+    now = time.time()
+    fields = ["updated_at = ?"]
+    values: list = [now]
+
+    if body.gradients_enabled is not None:
+        fields.append("gradients_enabled = ?")
+        values.append(1 if body.gradients_enabled else 0)
+    if body.gradient_color_1 is not None:
+        fields.append("gradient_color_1 = ?")
+        values.append(normalize_color(body.gradient_color_1, "#4E7ADF"))
+    if body.gradient_color_2 is not None:
+        fields.append("gradient_color_2 = ?")
+        values.append(normalize_color(body.gradient_color_2, "#144CCC"))
+
+    wallpaper_path = None
+    if body.clear_wallpaper:
+        old_path = user["wallpaper_path"] if "wallpaper_path" in user.keys() else None
+        if old_path and Path(old_path).exists():
+            Path(old_path).unlink(missing_ok=True)
+        fields.append("wallpaper_path = ?")
+        values.append(None)
+    elif body.wallpaper_b64:
+        raw_b64 = body.wallpaper_b64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            img_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            raise HTTPException(400, "Неверный формат обоев")
+        if len(img_bytes) > MAX_AVATAR_BYTES:
+            raise HTTPException(400, "Обои слишком большие (макс 5 МБ)")
+        wallpaper_file = WALLPAPERS_DIR / f"{username}.jpg"
+        wallpaper_file.write_bytes(img_bytes)
+        wallpaper_path = str(wallpaper_file)
+        fields.append("wallpaper_path = ?")
+        values.append(wallpaper_path)
+
+    values.append(username)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE username = ?", values)
+        await conn.commit()
+
+    fresh = await db_get_user(username)
+    return {"ok": True, **_customization_payload(fresh, username)}
 
 
 @router.put("/profile")

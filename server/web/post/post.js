@@ -51,24 +51,86 @@ async function fetchTgs(url) {
   return json;
 }
 
-function makeTgsPlayer(url) {
+function makeTgsPlayer(url, autoplay = true, loop = true) {
   const wrap = document.createElement('div');
   wrap.className = 'btn-like__icon';
   let anim = null;
+  let mounting = true;
+  let playWhenReady = false;
+  let resolvePlay = null;
+
+  function finishPlay() {
+    anim?.goToAndStop(anim.totalFrames - 1, true);
+    if (resolvePlay) {
+      resolvePlay();
+      resolvePlay = null;
+    }
+  }
 
   fetchTgs(url).then(json => {
     if (!wrap.isConnected) return;
+    wrap.innerHTML = '';
     anim = lottie.loadAnimation({
       container:     wrap,
       animationData: structuredClone(json),
       renderer:      'svg',
-      loop:          true,
-      autoplay:      true,
+      loop,
+      autoplay,
       rendererSettings: { preserveAspectRatio: 'xMidYMid meet' },
     });
-  }).catch(() => {});
+    if (!autoplay) {
+      anim.stop();
+      anim.goToAndStop(0, true);
+      anim.pause();
+    }
+    if (!loop) anim.addEventListener('complete', finishPlay);
+    if (playWhenReady) {
+      playWhenReady = false;
+      anim.goToAndPlay(0, true);
+    }
+  }).catch(() => {
+    if (resolvePlay) {
+      resolvePlay();
+      resolvePlay = null;
+    }
+  }).finally(() => {
+    mounting = false;
+  });
+
+  wrap.playOnce = () => new Promise(resolve => {
+    if (!wrap.isConnected) {
+      resolve();
+      return;
+    }
+    resolvePlay = resolve;
+    if (anim) {
+      anim.goToAndPlay(0, true);
+      return;
+    }
+    if (mounting) {
+      playWhenReady = true;
+      return;
+    }
+    playWhenReady = true;
+  });
+
+  wrap.showFirstFrame = () => {
+    playWhenReady = false;
+    anim?.stop();
+    anim?.goToAndStop(0, true);
+    anim?.pause();
+  };
 
   return wrap;
+}
+
+const REACTION_ANIMATION_BATCH_SIZE = 5;
+
+async function runBatchedTgsAnimations(players, wrapper) {
+  for (let i = 0; i < players.length && wrapper.isConnected; i += REACTION_ANIMATION_BATCH_SIZE) {
+    const batch = players.slice(i, i + REACTION_ANIMATION_BATCH_SIZE);
+    await Promise.all(batch.map(player => player.playOnce?.() || Promise.resolve()));
+  }
 }
 
 /* ── Media ── */
@@ -103,6 +165,7 @@ const EMOJI_RE = /\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu;
 function buildTextNode(text, emojiMap) {
   const p = document.createElement('p');
   p.className = 'card__text';
+  const players = [];
 
   const parts = [];
   let last = 0;
@@ -119,27 +182,18 @@ function buildTextNode(text, emojiMap) {
     } else {
       const url = emojiMap[part.value];
       if (url) {
-        const wrap = document.createElement('span');
-        wrap.className = 'inline-emoji';
-        fetchTgs(url).then(json => {
-          if (!wrap.isConnected) return;
-          lottie.loadAnimation({
-            container: wrap,
-            animationData: structuredClone(json),
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            rendererSettings: { preserveAspectRatio: 'xMidYMid meet' },
-          });
-        }).catch(() => {
-          wrap.textContent = part.value;
-        });
-        p.appendChild(wrap);
+        const player = makeTgsPlayer(url, false, false);
+        player.classList.add('inline-emoji');
+        player.showFirstFrame?.();
+        players.push(player);
+        p.appendChild(player);
       } else {
         p.appendChild(document.createTextNode(part.value));
       }
     }
   });
+
+  setTimeout(() => runBatchedTgsAnimations(players, p), 0);
 
   return p;
 }
@@ -154,7 +208,7 @@ function buildReactions(reactions, emojiMap) {
     btn.className = 'btn-like';
     const url = emojiMap['❤️'];
     if (url) {
-      btn.appendChild(makeTgsPlayer(url));
+      btn.appendChild(makeTgsPlayer(url, false, false));
     } else {
       const span = document.createElement('span');
       span.style.cssText = 'font-size:13px;line-height:1;';
@@ -170,6 +224,7 @@ function buildReactions(reactions, emojiMap) {
 
   const wrap = document.createElement('div');
   wrap.className = 'reactions-wrap';
+  const players = [];
 
   entries.forEach(([emoji, count]) => {
     const btn = document.createElement('div');
@@ -177,7 +232,10 @@ function buildReactions(reactions, emojiMap) {
 
     const url = emojiMap[emoji];
     if (url) {
-      btn.appendChild(makeTgsPlayer(url));
+      const player = makeTgsPlayer(url, false, false);
+      player.showFirstFrame?.();
+      players.push(player);
+      btn.appendChild(player);
     } else {
       const span = document.createElement('span');
       span.style.cssText = 'font-size:13px;line-height:1;';
@@ -190,6 +248,8 @@ function buildReactions(reactions, emojiMap) {
     btn.appendChild(cnt);
     wrap.appendChild(btn);
   });
+
+  setTimeout(() => runBatchedTgsAnimations(players, wrap), 0);
 
   return wrap;
 }

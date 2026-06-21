@@ -19,7 +19,7 @@ async def sse_events(token: str, request: Request):
         session_id = payload.get("jti")
         if not username:
             raise HTTPException(401, "Invalid token")
-        if not session_id or not await db_touch_auth_session(session_id, username):
+        if session_id and not await db_touch_auth_session(session_id, username):
             raise HTTPException(401, "Invalid token")
     except jwt.PyJWTError:
         raise HTTPException(401, "Invalid token")

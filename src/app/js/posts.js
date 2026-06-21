@@ -735,9 +735,10 @@ function buildPostTextEl(text) {
           const file = emojiMap.get(m[0]);
           if (file) {
             // placeholder — TGS загружается лениво через IntersectionObserver внутри createTgsPlayer
-            const player = createTgsPlayer(file, 20, true, false);
+            const player = createTgsPlayer(file, 20, false, false, false);
             player.classList.add('post__text-tgs');
             frag.appendChild(player);
+            registerBatchedTgsPlayer(p, player);
           } else {
             frag.appendChild(document.createTextNode(m[0]));
           }
@@ -982,7 +983,37 @@ async function getEmojiFileMap() {
   return _emojiFileMap;
 }
 
-function buildReactionBtn(emoji, count, active, id) {
+const REACTION_ANIMATION_BATCH_SIZE = 5;
+const _batchedTgsAnimationStates = new WeakMap();
+
+function registerBatchedTgsPlayer(wrapper, player, index = null) {
+  let state = _batchedTgsAnimationStates.get(wrapper);
+  if (!state) {
+    state = { players: [], timer: null, running: false };
+    _batchedTgsAnimationStates.set(wrapper, state);
+  }
+
+  player.showFirstFrame?.();
+  if (index === null) state.players.push(player);
+  else state.players[index] = player;
+  clearTimeout(state.timer);
+  state.timer = setTimeout(() => runBatchedTgsAnimations(wrapper), 0);
+}
+
+async function runBatchedTgsAnimations(wrapper) {
+  const state = _batchedTgsAnimationStates.get(wrapper);
+  if (!state || state.running || !wrapper.isConnected) return;
+
+  state.running = true;
+  const players = state.players.filter(Boolean);
+  for (let i = 0; i < players.length && wrapper.isConnected; i += REACTION_ANIMATION_BATCH_SIZE) {
+    const batch = players.slice(i, i + REACTION_ANIMATION_BATCH_SIZE);
+    await Promise.all(batch.map(player => player.playOnce?.() || Promise.resolve()));
+  }
+  state.running = false;
+}
+
+function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
   const btn = document.createElement('button');
   btn.className = 'btn-like' + (active ? ' btn-like--active' : '');
   btn.dataset.id = id;
@@ -994,8 +1025,9 @@ function buildReactionBtn(emoji, count, active, id) {
   getEmojiFileMap().then(map => {
     const file = map[emoji];
     if (file) {
-      const player = createTgsPlayer(file, 20, true);
+      const player = createTgsPlayer(file, 20, false, false, false);
       iconWrap.appendChild(player);
+      if (wrapper) registerBatchedTgsPlayer(wrapper, player, index);
     } else {
       iconWrap.textContent = emoji;
     }
@@ -1029,17 +1061,16 @@ function buildReactionsEl(post) {
     const insertAt = heartIdx === -1 ? others.length : heartIdx;
     ordered = [...others.slice(0, insertAt), '❤️', ...others.slice(insertAt)];
   } else if (totalOthers === 0) {
-    // нет ни одной реакции — показываем пустой лайк
     ordered = ['❤️'];
   } else {
     ordered = others;
   }
 
-  ordered.forEach(emoji => {
+  ordered.forEach((emoji, index) => {
     const count = post.reactions[emoji] || 0;
     const active = post.myReactions.includes(emoji);
 
-    const btn = buildReactionBtn(emoji, count, active, id);
+    const btn = buildReactionBtn(emoji, count, active, id, wrapper, index);
 
     btn.addEventListener('click', () => toggleReaction(id, emoji));
     btn.addEventListener('contextmenu', e => {
@@ -1254,7 +1285,9 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   }
   const newlineCount = (post.text ? post.text.match(/\n/g) || [] : []).length;
   const hasImages = post.images && post.images.length > 0;
-  const isTall = isVerified && (hasImages || newlineCount >= 2 || (post.text && post.text.length > 150));
+  const reactionCount = Object.keys(post.reactions || {}).length;
+  const hasWrappedReactions = reactionCount > 3;
+  const isTall = isVerified && (hasImages || hasWrappedReactions || newlineCount >= 2 || (post.text && post.text.length > 150));
   const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : '';
   const el = document.createElement('div');
   el.className = 'post post--enter' + extra;
@@ -1340,9 +1373,13 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   // Помечаем пост как многострочный для увеличенного градиента
   requestAnimationFrame(() => {
     const textEl = el.querySelector('.post__text');
-    if (!textEl) return;
-    const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
-    if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
+    const footerEl = el.querySelector('.post__footer');
+    if (textEl) {
+      const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
+      if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
+      if (isVerified && textEl.offsetHeight > lh * 2.8) el.classList.add('post--verified-tall');
+    }
+    if (isVerified && footerEl && footerEl.offsetHeight > 42) el.classList.add('post--verified-tall');
   });
 
   return el;
@@ -1375,7 +1412,10 @@ function refreshPostsVerifiedState(isVerified) {
     const textEl = postEl.querySelector('.post__text');
     const text = textEl ? textEl.textContent : '';
     const newlineCount = (text.match(/\n/g) || []).length;
-    const isTall = isVerified && (newlineCount >= 2 || text.length > 150);
+    const reactionCount = postEl.querySelectorAll('.post__reactions .btn-like').length;
+    const footerEl = postEl.querySelector('.post__footer');
+    const hasWrappedReactions = reactionCount > 3 || (footerEl && footerEl.offsetHeight > 42);
+    const isTall = isVerified && (hasWrappedReactions || newlineCount >= 2 || text.length > 150);
 
     postEl.classList.toggle('post--verified', isVerified);
     postEl.classList.toggle('post--verified-tall', isVerified && isTall);

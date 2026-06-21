@@ -11,13 +11,20 @@ function _renderUserCard(info) {
   badge.style.display = (info.verified || info.isVerified) ? 'inline-block' : 'none';
 
   const av  = document.getElementById('up-avatar');
+  av.onerror = () => { av.onerror = null; av.src = '/appimg/default_avatar.png'; };
   av.src = info.avatar_url || info.avatarUrl || '/appimg/default_avatar.png';
 
   const bannerImg = document.getElementById('up-banner-img');
   const bannerPH  = document.getElementById('up-banner-placeholder');
   bannerImg.onload = () => bannerImg.classList.add('loaded');
-  bannerImg.src    = info.banner_url || '';
-  bannerPH.style.display = info.banner_url ? 'none' : '';
+  bannerImg.onerror = () => {
+    bannerImg.onerror = null;
+    bannerImg.src = '/appimg/baner.png';
+    bannerImg.classList.add('loaded');
+    bannerPH.style.display = 'none';
+  };
+  bannerImg.src    = info.banner_url || '/appimg/baner.png';
+  bannerPH.style.display = 'none';
 }
 
 async function openUserProfile(tgUsername) {
@@ -101,7 +108,7 @@ function closeUserProfile() {
 document.getElementById('btn-user-profile-back').addEventListener('click', closeUserProfile);
 
 document.getElementById('nav-home').addEventListener('click',    () => { _userProfileFrom = 'feed'; });
-document.getElementById('nav-settings').addEventListener('click', () => { _userProfileFrom = 'settings'; });
+document.getElementById('btn-profile-settings')?.addEventListener('click', () => { _userProfileFrom = 'settings'; });
 document.getElementById('nav-profile').addEventListener('click', () => { _userProfileFrom = 'profile'; });
 
 document.addEventListener('click', e => {

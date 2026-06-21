@@ -671,9 +671,10 @@ function buildPostTextEl(text) {
           if (m.index > last) frag.appendChild(document.createTextNode(val.slice(last, m.index)));
           const file = emojiMap.get(m[0]);
           if (file) {
-            const player = createTgsPlayer(file, 20, true, false);
+            const player = createTgsPlayer(file, 20, false, false, false);
             player.classList.add('post__text-tgs');
             frag.appendChild(player);
+            registerBatchedTgsPlayer(p, player);
           } else {
             frag.appendChild(document.createTextNode(m[0]));
           }
@@ -903,7 +904,37 @@ async function getEmojiFileMap() {
   return _emojiFileMap;
 }
 
-function buildReactionBtn(emoji, count, active, id) {
+const REACTION_ANIMATION_BATCH_SIZE = 5;
+const _batchedTgsAnimationStates = new WeakMap();
+
+function registerBatchedTgsPlayer(wrapper, player, index = null) {
+  let state = _batchedTgsAnimationStates.get(wrapper);
+  if (!state) {
+    state = { players: [], timer: null, running: false };
+    _batchedTgsAnimationStates.set(wrapper, state);
+  }
+
+  player.showFirstFrame?.();
+  if (index === null) state.players.push(player);
+  else state.players[index] = player;
+  clearTimeout(state.timer);
+  state.timer = setTimeout(() => runBatchedTgsAnimations(wrapper), 0);
+}
+
+async function runBatchedTgsAnimations(wrapper) {
+  const state = _batchedTgsAnimationStates.get(wrapper);
+  if (!state || state.running || !wrapper.isConnected) return;
+
+  state.running = true;
+  const players = state.players.filter(Boolean);
+  for (let i = 0; i < players.length && wrapper.isConnected; i += REACTION_ANIMATION_BATCH_SIZE) {
+    const batch = players.slice(i, i + REACTION_ANIMATION_BATCH_SIZE);
+    await Promise.all(batch.map(player => player.playOnce?.() || Promise.resolve()));
+  }
+  state.running = false;
+}
+
+function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
   const btn = document.createElement('button');
   btn.className = 'btn-like' + (active ? ' btn-like--active' : '');
   btn.dataset.id = id;
@@ -915,8 +946,9 @@ function buildReactionBtn(emoji, count, active, id) {
   getEmojiFileMap().then(map => {
     const file = map[emoji];
     if (file) {
-      const player = createTgsPlayer(file, 20, true);
+      const player = createTgsPlayer(file, 20, false, false, false);
       iconWrap.appendChild(player);
+      if (wrapper) registerBatchedTgsPlayer(wrapper, player, index);
     } else {
       iconWrap.textContent = emoji;
     }
@@ -954,10 +986,10 @@ function buildReactionsEl(post) {
     ordered = others;
   }
 
-  ordered.forEach(emoji => {
+  ordered.forEach((emoji, index) => {
     const count  = post.reactions[emoji] || 0;
     const active = post.myReactions.includes(emoji);
-    const btn = buildReactionBtn(emoji, count, active, id);
+    const btn = buildReactionBtn(emoji, count, active, id, wrapper, index);
     btn.addEventListener('click', () => toggleReaction(id, emoji));
     btn.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -1173,8 +1205,8 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         <filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter>
         <filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter>
       </defs>
-      <g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="#4E7ADF"/></g>
-      <g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="#144CCC"/></g>
+      <g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="var(--verified-gradient-1, #4E7ADF)"/></g>
+      <g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="var(--verified-gradient-2, #144CCC)"/></g>
     </svg>` : '';
 
   el.innerHTML = `
@@ -1231,10 +1263,13 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
 
   requestAnimationFrame(() => {
     const textEl = el.querySelector('.post__text');
-    if (!textEl) return;
-    const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
-    if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
-    if (isVerified && textEl.offsetHeight > lh * 2.8) el.classList.add('post--verified-tall');
+    const footerEl = el.querySelector('.post__footer');
+    if (textEl) {
+      const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
+      if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
+      if (isVerified && textEl.offsetHeight > lh * 1.8) el.classList.add('post--verified-tall');
+    }
+    if (isVerified && footerEl && footerEl.offsetHeight > 44) el.classList.add('post--verified-tall');
   });
 
   return el;
@@ -1242,7 +1277,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
 
 function refreshPostsVerifiedState(isVerified) {
   const badgeSrc = '/appimg/verided.svg';
-  const bgSvg = `<svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter><filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter></defs><g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="#4E7ADF"/></g><g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="#144CCC"/></g></svg>`;
+  const bgSvg = `<svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter><filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter></defs><g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="var(--verified-gradient-1, #4E7ADF)"/></g><g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="var(--verified-gradient-2, #144CCC)"/></g></svg>`;
 
   document.querySelectorAll('.post').forEach(postEl => {
     const textEl = postEl.querySelector('.post__text');
@@ -1250,7 +1285,8 @@ function refreshPostsVerifiedState(isVerified) {
     const newlineCount = (text.match(/\n/g) || []).length;
     const hasPinnedLabel = !!postEl.querySelector('.post__pinned');
     const reactionCount = postEl.querySelectorAll('.post__reactions .btn-like').length;
-    const hasWrappedReactions = reactionCount > 3;
+    const footerEl = postEl.querySelector('.post__footer');
+    const hasWrappedReactions = reactionCount > 3 || (footerEl && footerEl.offsetHeight > 44);
     const isTall = isVerified && (hasPinnedLabel || hasWrappedReactions || newlineCount >= 2 || text.length > 150);
 
     postEl.classList.toggle('post--verified', isVerified);

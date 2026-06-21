@@ -11,7 +11,6 @@ function showView(name) {
   document.getElementById('view-settings').classList.toggle('view--active', name === 'settings');
   document.getElementById('view-user-profile').classList.toggle('view--active', name === 'user-profile');
   document.getElementById('nav-home').classList.toggle('active', name === 'feed');
-  document.getElementById('nav-settings').classList.toggle('active', name === 'settings');
   document.getElementById('nav-profile').classList.toggle('active', name === 'profile');
   if (name === 'feed') {
     renderFeedPosts();
@@ -27,19 +26,85 @@ function showView(name) {
   } else if (name === 'user-profile') {
     setScrollTopVisible(document.getElementById('user-profile-wrap').scrollTop > 300);
   }
+  setProfileSettingsVisible(name === 'profile');
+  updateNavIndicator();
+  updateFloatingNavLayout();
 }
 
 document.getElementById('nav-home').addEventListener('click', () => showView('feed'));
-document.getElementById('nav-settings').addEventListener('click', () => showView('settings'));
 document.getElementById('nav-profile').addEventListener('click', () => showView('profile'));
 
 /* ── Scroll to top ───────────────────────────── */
 const _scrollTopBtn = document.getElementById('btn-scroll-top');
+const _profileSettingsBtn = document.getElementById('btn-profile-settings');
+const _bottomNav = document.querySelector('.bottom-nav');
+const _bottomNavIndicator = document.getElementById('bottom-nav-indicator');
+const FLOATING_NAV_GAP = 8;
+
+function updateFloatingNavLayout() {
+  const items = [];
+  const settingsVisible = document.body.classList.contains('profile-settings-visible');
+  const scrollVisible = document.body.classList.contains('scroll-top-visible');
+
+  if (settingsVisible) items.push({ el: _profileSettingsBtn, kind: 'settings' });
+  items.push({ el: _bottomNav, kind: 'nav' });
+  if (scrollVisible) items.push({ el: _scrollTopBtn, kind: 'scroll' });
+
+  const widths = items.map(item => item.el.offsetWidth);
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + FLOATING_NAV_GAP * (items.length - 1);
+  let x = Math.round((window.innerWidth - totalWidth) / 2);
+
+  items.forEach((item, index) => {
+    const width = widths[index];
+    if (item.kind === 'nav') {
+      document.documentElement.style.setProperty('--bottom-nav-left', `${x + width / 2}px`);
+    } else if (item.kind === 'settings') {
+      document.documentElement.style.setProperty('--profile-settings-left', `${x}px`);
+    } else if (item.kind === 'scroll') {
+      document.documentElement.style.setProperty('--scroll-top-left', `${x}px`);
+    }
+    x += width + FLOATING_NAV_GAP;
+  });
+}
+
+function updateNavIndicator() {
+  const activeBtn = _bottomNav.querySelector('.nav-btn.active');
+  if (!activeBtn) {
+    _bottomNavIndicator.classList.remove('visible');
+    return;
+  }
+
+  const navRect = _bottomNav.getBoundingClientRect();
+  const btnRect = activeBtn.getBoundingClientRect();
+  const x = btnRect.left - navRect.left - 10;
+  _bottomNavIndicator.style.width = `${btnRect.width}px`;
+  _bottomNavIndicator.style.height = `${btnRect.height}px`;
+  _bottomNavIndicator.style.setProperty('--nav-indicator-x', `${x}px`);
+  _bottomNavIndicator.classList.add('visible');
+}
+
+requestAnimationFrame(() => {
+  updateFloatingNavLayout();
+  updateNavIndicator();
+});
+window.addEventListener('resize', () => {
+  updateFloatingNavLayout();
+  updateNavIndicator();
+});
 
 function setScrollTopVisible(visible) {
   _scrollTopBtn.classList.toggle('visible', visible);
   document.body.classList.toggle('scroll-top-visible', visible);
+  updateFloatingNavLayout();
 }
+
+function setProfileSettingsVisible(visible) {
+  _profileSettingsBtn.classList.toggle('visible', visible);
+  document.body.classList.toggle('profile-settings-visible', visible);
+  updateFloatingNavLayout();
+}
+
+_profileSettingsBtn.addEventListener('click', () => showView('settings'));
 
 _feedEl.addEventListener('scroll', () => {
   if (_currentView === 'feed') {

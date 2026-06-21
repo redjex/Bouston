@@ -17,10 +17,18 @@ function linkifyBio(text) {
 function renderProfile() {
   const p = getProfile();
 
-  document.getElementById('profile-avatar').src = p.avatar || '/appimg/default_avatar.png';
+  const profileAvatar = document.getElementById('profile-avatar');
+  profileAvatar.onerror = () => { profileAvatar.onerror = null; profileAvatar.src = '/appimg/default_avatar.png'; };
+  profileAvatar.src = p.avatar || '/appimg/default_avatar.png';
 
   const bannerImg = document.getElementById('banner-img');
   const bannerPH  = document.getElementById('banner-placeholder');
+  bannerImg.onerror = () => {
+    bannerImg.onerror = null;
+    bannerImg.src = '/appimg/baner.png';
+    bannerImg.classList.add('loaded');
+    bannerPH.style.display = 'none';
+  };
   if (p.banner) {
     bannerImg.src = p.banner;
     bannerImg.classList.add('loaded');

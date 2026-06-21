@@ -23,6 +23,14 @@ class UpdateProfileRequest(BaseModel):
     banner_b64:       str | None = None
 
 
+class UpdateCustomizationRequest(BaseModel):
+    gradients_enabled: bool | None = None
+    gradient_color_1:  str | None = None
+    gradient_color_2:  str | None = None
+    wallpaper_b64:     str | None = None
+    clear_wallpaper:   bool = False
+
+
 class CreatePostRequest(BaseModel):
     text:   str       = ""
     images: list[str] = []

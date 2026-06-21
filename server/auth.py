@@ -105,7 +105,7 @@ async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bear
         session_id: str = payload.get("jti", "")
         if not username:
             raise HTTPException(401, "Invalid token")
-        if not session_id or not await db_touch_auth_session(session_id, username):
+        if session_id and not await db_touch_auth_session(session_id, username):
             raise HTTPException(401, "Session ended. Sign in again")
         return username
     except jwt.ExpiredSignatureError:
