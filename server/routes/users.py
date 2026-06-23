@@ -19,8 +19,8 @@ from config import (
     USERNAME_RE,
 )
 from database import (
-    db_create_auth_session, db_get_user, db_list_auth_sessions,
-    db_revoke_auth_session, db_set_registered, db_upsert_user,
+    avatar_urls, db_create_auth_session, db_get_user, db_list_auth_sessions, ensure_avatar_low,
+    db_revoke_auth_session, db_set_registered, db_upsert_user, save_avatar_image,
 )
 from models import SendCodeRequest, UpdateCustomizationRequest, UpdateProfileRequest, UserInfoRequest, VerifyCodeRequest
 from sse import broadcast_event
@@ -156,7 +156,9 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
 
     user = await db_get_user(username)
     t = int(user["updated_at"] or 0) if user else 0
-    avatar_url = f"{SERVER_BASE}/img/{username}.jpg?t={t}" if (user and user["avatar_path"] and Path(user["avatar_path"]).exists()) else DEFAULT_AVATAR_URL
+    avatar_url, avatar_preview_url = avatar_urls(username, user["avatar_path"], t) if user else (None, None)
+    avatar_url = avatar_url or DEFAULT_AVATAR_URL
+    avatar_preview_url = avatar_preview_url or avatar_url
     banner_url = f"{SERVER_BASE}/img/banners/{username}.jpg?t={t}" if (user and user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
 
     return {
@@ -170,6 +172,7 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
             "bio":              user["bio"] if user else None,
             "verified":         bool(user["verified"]) if user else False,
             "avatar_url":       avatar_url,
+            "avatar_preview_url": avatar_preview_url,
             "banner_url":       banner_url,
         },
     }
@@ -219,7 +222,9 @@ async def get_user_fast(username: str):
         raise HTTPException(404, "Пользователь не найден")
 
     t          = int(user["updated_at"] or 0)
-    avatar_url = f"{SERVER_BASE}/img/{u}.jpg?t={t}" if (user["avatar_path"] and Path(user["avatar_path"]).exists()) else DEFAULT_AVATAR_URL
+    avatar_url, avatar_preview_url = avatar_urls(u, user["avatar_path"], t)
+    avatar_url = avatar_url or DEFAULT_AVATAR_URL
+    avatar_preview_url = avatar_preview_url or avatar_url
     banner_url = f"{SERVER_BASE}/img/banners/{u}.jpg?t={t}" if (user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
 
     return {
@@ -229,6 +234,7 @@ async def get_user_fast(username: str):
         "bio":              user["bio"],
         "verified":         bool(user["verified"]),
         "avatar_url":       avatar_url,
+        "avatar_preview_url": avatar_preview_url,
         "banner_url":       banner_url,
     }
 
@@ -388,7 +394,8 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
         if len(img_bytes) > MAX_AVATAR_BYTES:
             raise HTTPException(400, "Аватарка слишком большая (макс 5 МБ)")
         avatar_file = IMG_DIR / f"{tg_username}.jpg"
-        avatar_file.write_bytes(img_bytes)
+        save_avatar_image(img_bytes, avatar_file, size=640)
+        ensure_avatar_low(tg_username, avatar_file)
         new_avatar_path = str(avatar_file)
 
     new_banner_path: str | None = None
@@ -424,11 +431,14 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
 
     if new_avatar_path:
         import asyncio
-        avatar_url = f"{SERVER_BASE}/img/{tg_username}.jpg?t={int(now)}"
+        avatar_url, avatar_preview_url = avatar_urls(tg_username, new_avatar_path, now)
+        avatar_url = avatar_url or f"{SERVER_BASE}/img/{tg_username}.jpg?t={int(now)}"
+        avatar_preview_url = avatar_preview_url or avatar_url
         asyncio.create_task(broadcast_event({
             "type":      "avatar_update",
             "username":  tg_username,
             "avatarUrl": avatar_url,
+            "avatarPreviewUrl": avatar_preview_url,
         }))
 
     return {"ok": True}

@@ -69,6 +69,19 @@ async function checkAuth() {
   return true;
 }
 
+function applyUserDataToLocalProfile(profile, data, canUpdateAvatar = true) {
+  if (!data) return;
+  if (data.banner_url) profile.banner = data.banner_url;
+  if (canUpdateAvatar && data.avatar_url) profile.avatar = data.avatar_url;
+  if (canUpdateAvatar && (data.avatar_preview_url || data.avatar_url)) {
+    profile.avatarPreview = data.avatar_preview_url || getAvatarPreviewSrc(data.avatar_url);
+  }
+  if (data.bio) profile.bio = data.bio;
+  if (data.display_name) profile.name = data.display_name;
+  if (data.profile_username) profile.username = data.profile_username;
+  if (data.verified != null) profile.verified = !!data.verified;
+}
+
 async function initTgProfile() {
   try {
     const tgUser = await window.electronAPI?.getTgUser();
@@ -84,57 +97,71 @@ async function initTgProfile() {
       p = getProfile();
     }
 
-    if (tgUser.first_name) {
-      p.name = tgUser.last_name
-        ? tgUser.first_name + ' ' + tgUser.last_name
-        : tgUser.first_name;
+    if (!p.name || p.name === 'Bouston') {
+      if (tgUser.first_name) {
+        p.name = tgUser.last_name
+          ? tgUser.first_name + ' ' + tgUser.last_name
+          : tgUser.first_name;
+      }
     }
-    if (tgUser.profile_username) p.username = tgUser.profile_username;
-    else if (tgUser.username) p.username = tgUser.username;
-    p.bio = tgUser.bio || 'Привет, я использую Bouston';
+    if (!p.username) {
+      if (tgUser.profile_username) p.username = tgUser.profile_username;
+      else if (tgUser.username) p.username = tgUser.username;
+    }
+    if (!p.bio || p.bio === DEFAULT_PROFILE.bio) p.bio = tgUser.bio || 'Привет, я использую Bouston';
     if (tgUser.verified) p.verified = true;
     if (tgUser.avatar_b64) {
       p.avatar = tgUser.avatar_b64;
-    } else {
-      const resp = await fetch('../../img/default_avatar.png');
-      const blob = await resp.blob();
-      p.avatar = await new Promise(res => {
-        const r = new FileReader();
-        r.onload = e => res(e.target.result);
-        r.readAsDataURL(blob);
-      });
+      p.avatarPreview = tgUser.avatar_b64;
+    } else if (tgUser.avatar_url && !p.avatar) {
+      p.avatar = tgUser.avatar_url;
+      p.avatarPreview = tgUser.avatar_preview_url || getAvatarPreviewSrc(tgUser.avatar_url);
+    } else if (!p.avatar) {
+      p.avatar = '../../img/default_avatar.png';
+      p.avatarPreview = p.avatar;
     }
-    // Запрашиваем banner_url с сервера — он не входит в tgUser
-    try {
-      const uRes = await fetch(`${API}/users/${tgUser.username}`);
-      if (uRes.ok) {
-        const uData = await uRes.json();
-        p.banner = uData.banner_url || null;
-      }
-    } catch {}
+
+    const cachedUser = getCachedUserProfile(tgUser.username);
+    if (cachedUser) applyUserDataToLocalProfile(p, cachedUser, !tgUser.avatar_b64);
+
+    if (!isProfileCacheFresh(p)) {
+      try {
+        const uData = await fetchUserProfileCached(tgUser.username, { force: true });
+        if (uData) applyUserDataToLocalProfile(p, uData, !tgUser.avatar_b64);
+      } catch {}
+    }
 
     p.tgSynced   = true;
     p.tgUsername = tgUser.username || null;
     saveProfile(p);
 
     const avatarSrc = p.avatar || '../../img/default_avatar.png';
-    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar', 'profile-avatar'].forEach(id => {
+    const avatarPreviewSrc = p.avatarPreview || avatarSrc;
+    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.src = avatarSrc;
+      if (el) el.src = avatarPreviewSrc;
     });
+    const profileAvatar = document.getElementById('profile-avatar');
+    if (profileAvatar) profileAvatar.src = avatarSrc;
   } catch {}
 }
 
 /* ── Real-time avatar updates (SSE) ─────────────── */
-function updateAvatarsInDom(username, avatarUrl) {
+function updateAvatarsInDom(username, avatarUrl, avatarPreviewUrl) {
   document.querySelectorAll(`[data-author="${username}"] .avatar`).forEach(img => {
-    img.src = avatarUrl;
+    img.src = avatarPreviewUrl || avatarUrl;
   });
   if (username === window._tgUsername) {
-    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar', 'profile-avatar'].forEach(id => {
+    const p = getProfile();
+    p.avatar = avatarUrl || p.avatar;
+    p.avatarPreview = avatarPreviewUrl || avatarUrl || p.avatarPreview;
+    saveProfile(p);
+    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.src = avatarUrl;
+      if (el) el.src = avatarPreviewUrl || avatarUrl;
     });
+    const profileAvatar = document.getElementById('profile-avatar');
+    if (profileAvatar) profileAvatar.src = avatarUrl;
   }
 }
 
@@ -151,7 +178,7 @@ async function connectEvents() {
   es.onmessage = e => {
     try {
       const data = JSON.parse(e.data);
-      if (data.type === 'avatar_update')   updateAvatarsInDom(data.username, data.avatarUrl);
+      if (data.type === 'avatar_update')   updateAvatarsInDom(data.username, data.avatarUrl, data.avatarPreviewUrl);
       if (data.type === 'new_post')        prependPostToFeed(data.post);
       if (data.type === 'reaction_update') applyReactionUpdate(data.postId, data.reactions);
     } catch {}

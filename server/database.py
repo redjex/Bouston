@@ -1,11 +1,25 @@
 import json
+import io
+import asyncio
 import time
 import uuid
 from pathlib import Path
 
 import aiosqlite
 
-from config import DB_PATH, SERVER_BASE
+from config import DB_PATH, IMG_DIR, POSTS_IMG_DIR, SERVER_BASE
+
+try:
+    from PIL import Image, ImageOps
+except Exception:
+    Image = None
+    ImageOps = None
+
+AVATAR_LOW_DIR = IMG_DIR / "avatar_low"
+AVATAR_LOW_DIR.mkdir(parents=True, exist_ok=True)
+POST_PREVIEW_SIZE = (320, 320)
+AVATAR_LOW_SIZE = (240, 240)
+AVATAR_LOW_SCAN_INTERVAL = 10
 
 POSTS_QUERY = """
     SELECT p.*,
@@ -27,6 +41,79 @@ COMMENTS_QUERY = """
     FROM comments c
     JOIN users u ON u.username = c.tg_username
 """
+
+
+def save_avatar_image(raw: bytes, output_path: Path, size: int = 640, quality: int = 88) -> None:
+    if Image is None or ImageOps is None:
+        output_path.write_bytes(raw)
+        return
+    with Image.open(io.BytesIO(raw)) as img:
+        img = ImageOps.exif_transpose(img).convert("RGB")
+        img = ImageOps.fit(img, (size, size), Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+        img.save(output_path, "JPEG", quality=quality, optimize=True, progressive=True)
+
+
+def ensure_avatar_low(username: str, avatar_path: str | Path | None) -> str | None:
+    avatar_path = Path(avatar_path) if avatar_path else None
+    if Image is None or ImageOps is None or not avatar_path or not avatar_path.exists():
+        return None
+    low_path = AVATAR_LOW_DIR / f"{username}.jpg"
+    try:
+        src_mtime = avatar_path.stat().st_mtime
+        if low_path.exists() and low_path.stat().st_mtime >= src_mtime:
+            with Image.open(low_path) as low_img:
+                if low_img.size == AVATAR_LOW_SIZE:
+                    return f"avatar_low/{username}.jpg"
+        with Image.open(avatar_path) as img:
+            img = ImageOps.exif_transpose(img).convert("RGB")
+            img = ImageOps.fit(img, AVATAR_LOW_SIZE, Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+            img.save(low_path, "JPEG", quality=70, optimize=True, progressive=True)
+            return f"avatar_low/{username}.jpg"
+    except Exception:
+        return None
+
+
+def build_avatar_low_from_img_dir() -> None:
+    AVATAR_LOW_DIR.mkdir(parents=True, exist_ok=True)
+    for avatar_path in IMG_DIR.iterdir():
+        if not avatar_path.is_file():
+            continue
+        if avatar_path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+            continue
+        ensure_avatar_low(avatar_path.stem, avatar_path)
+
+
+def avatar_urls(username: str, avatar_path: str | None, updated_at: float | int | None) -> tuple[str | None, str | None]:
+    if not avatar_path or not Path(avatar_path).exists():
+        return None, None
+    t = int(updated_at or 0)
+    full_url = f"{SERVER_BASE}/img/{username}.jpg?t={t}"
+    low = ensure_avatar_low(username, avatar_path)
+    preview_url = f"{SERVER_BASE}/img/{low}?t={t}" if low else full_url
+    return full_url, preview_url
+
+
+def ensure_post_image_preview(filename: str, preview: str | None) -> str | None:
+    if Image is None or ImageOps is None or not filename:
+        return preview
+    source_path = POSTS_IMG_DIR / filename
+    if not source_path.exists():
+        return preview
+    preview_name = preview or f"previews/{Path(filename).stem}.preview.jpg"
+    preview_path = POSTS_IMG_DIR / preview_name
+    try:
+        if preview_path.exists():
+            with Image.open(preview_path) as preview_img:
+                if preview_img.size == POST_PREVIEW_SIZE:
+                    return preview_name
+        preview_path.parent.mkdir(parents=True, exist_ok=True)
+        with Image.open(source_path) as img:
+            img = ImageOps.exif_transpose(img).convert("RGB")
+            img = ImageOps.fit(img, POST_PREVIEW_SIZE, Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+            img.save(preview_path, "JPEG", quality=72, optimize=True, progressive=True)
+        return preview_name
+    except Exception:
+        return preview
 
 
 async def get_db() -> aiosqlite.Connection:
@@ -129,6 +216,12 @@ async def init_db() -> None:
             WHERE profile_username IS NOT NULL AND profile_username != LOWER(profile_username)
         """)
         await conn.commit()
+
+
+async def build_avatar_low_worker() -> None:
+    while True:
+        await asyncio.to_thread(build_avatar_low_from_img_dir)
+        await asyncio.sleep(AVATAR_LOW_SCAN_INTERVAL)
 
 
 async def db_upsert_user(
@@ -277,12 +370,35 @@ async def db_revoke_auth_session(username: str, session_id: str) -> bool:
 
 def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_reactions: list, comment_count: int) -> dict:
     images_filenames = json.loads(row["images"] or "[]")
-    image_urls = [f"{SERVER_BASE}/img/posts/{f}" for f in images_filenames]
+    image_urls = []
+    for item in images_filenames:
+        if isinstance(item, str):
+            media_type = "video" if item.lower().rsplit(".", 1)[-1] in {"mp4", "webm", "mov"} else "image"
+            preview = ensure_post_image_preview(item, None) if media_type == "image" else item
+            image_urls.append({
+                "src":        f"{SERVER_BASE}/img/posts/{item}",
+                "fullSrc":    f"{SERVER_BASE}/img/posts/{item}",
+                "previewSrc": f"{SERVER_BASE}/img/posts/{preview or item}",
+                "type":       media_type,
+                "mime":       "",
+            })
+            continue
+        filename = item.get("file") or item.get("src") or ""
+        if not filename:
+            continue
+        media_type = item.get("type") or ("video" if filename.lower().rsplit(".", 1)[-1] in {"mp4", "webm", "mov"} else "image")
+        preview = item.get("preview") or filename
+        if media_type == "image":
+            preview = ensure_post_image_preview(filename, preview) or preview
+        image_urls.append({
+            "src":        f"{SERVER_BASE}/img/posts/{preview}",
+            "fullSrc":    f"{SERVER_BASE}/img/posts/{filename}",
+            "previewSrc": f"{SERVER_BASE}/img/posts/{preview}",
+            "type":       media_type,
+            "mime":       item.get("mime") or "",
+        })
 
-    avatar_url = None
-    if row["author_avatar_path"] and Path(row["author_avatar_path"]).exists():
-        t = int(row["updated_at"] or 0)
-        avatar_url = f"{SERVER_BASE}/img/{row['tg_username']}.jpg?t={t}"
+    avatar_url, avatar_preview_url = avatar_urls(row["tg_username"], row["author_avatar_path"], row["updated_at"])
 
     return {
         "id":           row["id"],
@@ -301,6 +417,7 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
             "displayName":     row["display_name"] or row["first_name"] or row["tg_username"],
             "profileUsername": row["profile_username"] or row["tg_username"],
             "avatarUrl":       avatar_url,
+            "avatarPreviewUrl": avatar_preview_url,
             "isPremium":       bool(row["author_premium"]),
             "isVerified":      bool(row["author_verified"]),
         },
@@ -325,10 +442,7 @@ async def fetch_post_extras(conn: aiosqlite.Connection, post_id: int, viewer: st
 
 
 def build_comment_response(row: aiosqlite.Row, viewer: str, likes_count: int, my_like: bool) -> dict:
-    avatar_url = None
-    if row["author_avatar_path"] and Path(row["author_avatar_path"]).exists():
-        t = int(row["updated_at"] or 0)
-        avatar_url = f"{SERVER_BASE}/img/{row['tg_username']}.jpg?t={t}"
+    avatar_url, avatar_preview_url = avatar_urls(row["tg_username"], row["author_avatar_path"], row["updated_at"])
 
     return {
         "id":         row["id"],
@@ -341,6 +455,7 @@ def build_comment_response(row: aiosqlite.Row, viewer: str, likes_count: int, my
             "tgUsername":  row["tg_username"],
             "displayName": row["display_name"] or row["first_name"] or row["tg_username"],
             "avatarUrl":   avatar_url,
+            "avatarPreviewUrl": avatar_preview_url,
             "isVerified":  bool(row["author_verified"]),
         },
     }

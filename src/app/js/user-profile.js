@@ -1,7 +1,5 @@
 'use strict';
 
-/* ── User profile view ──────────────────────────────────────────────── */
-
 let _userProfileFrom = 'feed';
 
 function _renderUserCard(info) {
@@ -13,12 +11,18 @@ function _renderUserCard(info) {
   badge.style.display = (info.verified || info.isVerified) ? 'inline-block' : 'none';
 
   const av  = document.getElementById('up-avatar');
-  const src = info.avatar_url || info.avatarUrl || '../../img/default_avatar.png';
-  av.src = src;
+  av.onerror = () => { av.onerror = null; av.src = '../../img/default_avatar.png'; };
+  av.src = info.avatar_url || info.avatarUrl || '../../img/default_avatar.png';
 
   const bannerImg = document.getElementById('up-banner-img');
   const bannerPH  = document.getElementById('up-banner-placeholder');
   bannerImg.onload = () => bannerImg.classList.add('loaded');
+  bannerImg.onerror = () => {
+    bannerImg.onerror = null;
+    bannerImg.src = '../../img/baner.png';
+    bannerImg.classList.add('loaded');
+    bannerPH.style.display = 'none';
+  };
   bannerImg.src    = info.banner_url || '../../img/baner.png';
   bannerPH.style.display = 'none';
 }
@@ -31,11 +35,10 @@ async function openUserProfile(tgUsername) {
   const wrap    = document.getElementById('user-profile-wrap');
   const postsEl = document.getElementById('up-posts-container');
 
-  // Сброс
   document.getElementById('up-name').textContent     = '...';
   document.getElementById('up-username').textContent  = '@' + tgUsername;
   document.getElementById('up-bio').textContent       = '';
-  document.getElementById('up-avatar').src            = '../../img/logo_blue.png';
+  document.getElementById('up-avatar').src            = '../../img/default_avatar.png';
   document.getElementById('up-verified-badge').style.display = 'none';
   document.getElementById('up-banner-img').classList.remove('loaded');
   postsEl.innerHTML = '<p class="feed__empty">Загрузка...</p>';
@@ -43,25 +46,23 @@ async function openUserProfile(tgUsername) {
 
   showView('user-profile');
 
-  // Посты — основной запрос (быстрый)
+  const cachedInfo = getCachedUserProfile(tgUsername);
+  if (cachedInfo) _renderUserCard(cachedInfo);
+
   let posts = [];
   try {
     const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(tgUsername)}&limit=100`);
     if (res.ok) posts = await res.json();
   } catch {}
 
-  // Карточку рендерим сразу из данных автора первого поста
   if (posts.length && posts[0].author) {
     _renderUserCard(posts[0].author);
   }
 
-  // Биo и актуальные данные — фоновый запрос (только БД, быстро)
-  fetch(`${API}/users/${encodeURIComponent(tgUsername)}`)
-    .then(r => r.ok ? r.json() : null)
+  fetchUserProfileCached(tgUsername)
     .then(info => { if (info) _renderUserCard(info); })
     .catch(() => {});
 
-  // Посты
   postsEl.innerHTML = '';
   if (!posts.length) {
     postsEl.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
@@ -86,7 +87,7 @@ async function openUserProfile(tgUsername) {
     const btn    = wrap.querySelector('.post__more');
     const id     = Number(btn.dataset.id);
     const postEl = wrap.closest('.post');
-    btn.addEventListener('click', e => {
+    wrap.addEventListener('click', e => {
       e.stopPropagation();
       if (_openMenuId === id) { closeAllMenus(); return; }
       openPostMenu(id, postEl, document.getElementById('user-profile-wrap'), [
@@ -107,9 +108,9 @@ function closeUserProfile() {
 document.getElementById('btn-user-profile-back').addEventListener('click', closeUserProfile);
 
 document.getElementById('nav-home').addEventListener('click',    () => { _userProfileFrom = 'feed'; });
+document.getElementById('btn-profile-settings')?.addEventListener('click', () => { _userProfileFrom = 'settings'; });
 document.getElementById('nav-profile').addEventListener('click', () => { _userProfileFrom = 'profile'; });
 
-// ── Делегирование кликов: аватарка / имя / хэндл внутри поста ──
 document.addEventListener('click', e => {
   if (e.target.closest('.compose'))      return;
   if (e.target.closest('.profile-card')) return;

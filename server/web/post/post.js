@@ -134,26 +134,52 @@ async function runBatchedTgsAnimations(players, wrapper) {
 }
 
 /* ── Media ── */
-function isVideo(src) { return /\.(mp4|webm|ogg)$/i.test(src); }
+function normalizeMedia(item) {
+  if (typeof item === 'string') {
+    return {
+      src: item,
+      fullSrc: item,
+      previewSrc: item,
+      type: /\.(mp4|webm|mov|ogg)$/i.test(item) ? 'video' : 'image',
+    };
+  }
+  return {
+    src: item.src || item.previewSrc || item.fullSrc,
+    fullSrc: item.fullSrc || item.src,
+    previewSrc: item.previewSrc || item.src || item.fullSrc,
+    type: item.type || (/\.(mp4|webm|mov|ogg)$/i.test(item.fullSrc || item.src || '') ? 'video' : 'image'),
+  };
+}
+
+function isVideo(item) { return normalizeMedia(item).type === 'video'; }
 
 function buildMedia(images) {
   if (!images?.length) return null;
   if (images.length === 1) {
-    const src = images[0];
-    const el  = document.createElement(isVideo(src) ? 'video' : 'img');
+    const media = normalizeMedia(images[0]);
+    const el  = document.createElement(media.type === 'video' ? 'video' : 'img');
     el.className = 'media-single';
-    el.src = src;
-    if (isVideo(src)) { el.controls = true; el.playsInline = true; el.muted = true; }
+    el.src = media.type === 'video' ? media.fullSrc : media.previewSrc;
+    if (media.type === 'image') {
+      el.loading = 'lazy';
+      el.decoding = 'async';
+    }
+    if (media.type === 'video') { el.controls = true; el.playsInline = true; el.muted = true; el.preload = 'metadata'; }
     return el;
   }
   const count = Math.min(images.length, 4);
   const grid  = document.createElement('div');
   grid.className = `media-grid media-grid--${count}`;
-  images.slice(0, 4).forEach(src => {
-    const el = document.createElement(isVideo(src) ? 'video' : 'img');
+  images.slice(0, 4).forEach(item => {
+    const media = normalizeMedia(item);
+    const el = document.createElement(media.type === 'video' ? 'video' : 'img');
     el.className = 'media-grid__item';
-    el.src = src;
-    if (isVideo(src)) { el.controls = true; el.playsInline = true; el.muted = true; }
+    el.src = media.type === 'video' ? media.fullSrc : media.previewSrc;
+    if (media.type === 'image') {
+      el.loading = 'lazy';
+      el.decoding = 'async';
+    }
+    if (media.type === 'video') { el.controls = true; el.playsInline = true; el.muted = true; el.preload = 'metadata'; }
     grid.appendChild(el);
   });
   return grid;

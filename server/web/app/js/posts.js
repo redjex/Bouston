@@ -105,6 +105,7 @@
     _isVideo = !!isVideo;
     if (_isVideo) {
       lbVideo.src = src;
+      lbVideo.preload = 'auto';
       lbVideo.style.display = '';
       lbImg.style.display = 'none';
       lbToolbarPhoto.style.display = 'none';
@@ -175,9 +176,9 @@
     const items = [];
     postEl.querySelectorAll('.post__images .post__image, .post__images .post__video').forEach(el => {
       const isVideo = el.classList.contains('post__video') || el.classList.contains('vplayer');
-      items.push({ src: isVideo ? el.dataset.src : el.src, isVideo });
+      items.push({ src: el.dataset.fullSrc || el.dataset.src || el.src, isVideo });
     });
-    const clickedSrc = clickedEl.dataset.src || clickedEl.src;
+    const clickedSrc = clickedEl.dataset.fullSrc || clickedEl.dataset.src || clickedEl.src;
     const index = items.findIndex(it => it.src === clickedSrc);
     return { items, index: index === -1 ? 0 : index };
   }
@@ -187,13 +188,13 @@
     const vidWrap = e.target.closest('.post__video');
     if (vidWrap) {
       const { items, index } = collectPostItems(vidWrap);
-      openLightbox(vidWrap.dataset.src, true, items, index);
+      openLightbox(vidWrap.dataset.fullSrc || vidWrap.dataset.src, true, items, index);
       return;
     }
     const img = e.target.closest('.post__image:not(.post__video)');
     if (img) {
       const { items, index } = collectPostItems(img);
-      openLightbox(img.src, false, items, index);
+      openLightbox(img.dataset.fullSrc || img.src, false, items, index);
       return;
     }
     if (lb.style.display !== 'none' && e.target === lb) closeLightbox();
@@ -367,16 +368,17 @@ function fmtTime(s) {
   return `${m}:${String(ss).padStart(2, '0')}`;
 }
 
-function buildVideoPlayer(src, extraClass = '') {
+function buildVideoPlayer(src, extraClass = '', fullSrc = src) {
   const wrap = document.createElement('div');
   wrap.className = 'vplayer' + (extraClass ? ' ' + extraClass : '');
   wrap.dataset.src = src;
+  wrap.dataset.fullSrc = fullSrc || src;
 
   const vid = document.createElement('video');
   vid.className   = 'vplayer__video';
   vid.src         = src;
+  vid.preload     = 'metadata';
   vid.muted       = true;
-  vid.autoplay    = true;
   vid.loop        = true;
   vid.playsInline = true;
   wrap.appendChild(vid);
@@ -387,7 +389,7 @@ function buildVideoPlayer(src, extraClass = '') {
 function mountVideoPlayers(container) {
   container.querySelectorAll('.post__video-wrap[data-src]').forEach(wrap => {
     const src = wrap.dataset.src;
-    const player = buildVideoPlayer(src, 'post__video');
+    const player = buildVideoPlayer(src, 'post__video', wrap.dataset.fullSrc || src);
     wrap.replaceWith(player);
   });
 }
@@ -694,6 +696,7 @@ function buildPostTextEl(text) {
 
 /* ── Server posts cache ─────────────────────── */
 const _serverPostsMap = new Map();
+const _editingPostIds = new Set();
 
 function registerServerPost(post) {
   if (!post.reactions)   post.reactions   = {};
@@ -765,15 +768,23 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
 
 /* ── Post actions ───────────────────────────── */
 function startEditPost(id, postEl, onDone) {
+  const existingEditor = postEl.querySelector('.post__edit-area');
+  if (_editingPostIds.has(id) || postEl.classList.contains('post--editing') || existingEditor) {
+    existingEditor?.focus();
+    return;
+  }
+
   const isServer = _serverPostsMap.has(id);
   const post = isServer ? _serverPostsMap.get(id) : getPosts().find(p => p.id === id);
   if (!post) return;
+  _editingPostIds.add(id);
   postEl.classList.add('post--editing');
 
   const textWrap = postEl.querySelector('.post__text-wrap') || postEl.querySelector('.post__text');
+  const originalText = post.text || '';
   const textarea = document.createElement('textarea');
   textarea.className = 'post__edit-area';
-  textarea.value     = post.text;
+  textarea.value     = originalText;
 
   const actions   = document.createElement('div');
   actions.className = 'post__edit-actions';
@@ -799,34 +810,87 @@ function startEditPost(id, postEl, onDone) {
   textarea.focus();
   textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
-  cancelBtn.addEventListener('click', onDone);
-  saveBtn.addEventListener('click', async () => {
+  const closeEditor = text => {
+    postEl.querySelectorAll('.post__edit-actions').forEach(el => el.remove());
+    postEl.querySelectorAll('.post__edit-area').forEach((el, index) => {
+      if (index === 0) el.replaceWith(buildPostTextEl(text));
+      else el.remove();
+    });
+    if (!postEl.querySelector('.post__text')) {
+      postEl.querySelector('.post__header')?.after(buildPostTextEl(text));
+    }
+    postEl.classList.remove('post--editing');
+    _editingPostIds.delete(id);
+  };
+  const failSave = message => {
+    saveBtn.disabled = false;
+    saveBtn.textContent = saveBtn.dataset.idleText || 'Сохранить';
+    delete saveBtn.dataset.idleText;
+    showPostError(message || 'Не удалось сохранить пост', saveBtn);
+  };
+
+  cancelBtn.addEventListener('click', e => {
+    e.preventDefault();
+    closeEditor(originalText);
+    onDone();
+  });
+  saveBtn.addEventListener('click', async e => {
+    e.preventDefault();
     const newText = textarea.value.trim();
-    if (!newText) return;
+    if (!newText) { failSave('Текст не может быть пустым'); return; }
+    saveBtn.dataset.idleText = saveBtn.textContent;
+    saveBtn.textContent = 'Сохранение...';
     saveBtn.disabled = true;
 
     if (isServer) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
       try {
         const res = await apiFetch(`${API}/posts/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: newText }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
         if (res.ok) {
           const updated = await res.json();
-          _serverPostsMap.set(id, { ..._serverPostsMap.get(id), ...updated });
+          const nextPost = { ..._serverPostsMap.get(id), ...updated };
+          _serverPostsMap.set(id, nextPost);
+          mergeFeedPostsCache([nextPost]);
+          if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+        } else {
+          let message = 'Не удалось сохранить пост';
+          try {
+            const data = await res.json();
+            if (data?.detail) message = data.detail;
+          } catch {}
+          failSave(message);
+          return;
         }
-      } catch {}
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err.name === 'AbortError') {
+          failSave('Сервер не ответил, попробуй ещё раз');
+          return;
+        }
+        failSave('Нет соединения с сервером');
+        return;
+      }
     } else {
       const posts = getPosts();
       const p = posts.find(p => p.id === id);
       if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
     }
+    saveBtn.textContent = saveBtn.dataset.idleText || 'Сохранить';
+    delete saveBtn.dataset.idleText;
+    closeEditor(isServer ? (_serverPostsMap.get(id)?.text || newText) : newText);
     onDone();
   });
 }
 
 function deletePost(id, onDone) {
+  removePostFromPostsCaches(id);
   if (_serverPostsMap.has(id)) {
     apiFetch(`${API}/posts/${id}`, { method: 'DELETE' }).catch(() => {});
     _serverPostsMap.delete(id);
@@ -851,7 +915,17 @@ function deletePost(id, onDone) {
 function pinPost(id, onDone) {
   if (_serverPostsMap.has(id)) {
     apiFetch(`${API}/posts/${id}/pin`, { method: 'PUT' })
-      .then(r => r.json()).then(() => onDone()).catch(() => onDone());
+      .then(r => r.ok ? r.json() : null)
+      .then(updated => {
+        if (updated) {
+          const nextPost = { ..._serverPostsMap.get(id), ...updated };
+          _serverPostsMap.set(id, nextPost);
+          mergeFeedPostsCache([nextPost]);
+          if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+        }
+        onDone();
+      })
+      .catch(() => onDone());
     return;
   }
   const posts = getPosts();
@@ -918,7 +992,11 @@ function registerBatchedTgsPlayer(wrapper, player, index = null) {
   if (index === null) state.players.push(player);
   else state.players[index] = player;
   clearTimeout(state.timer);
-  state.timer = setTimeout(() => runBatchedTgsAnimations(wrapper), 0);
+  state.timer = setTimeout(() => {
+    const run = () => runBatchedTgsAnimations(wrapper);
+    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 900 });
+    else setTimeout(run, 120);
+  }, 80);
 }
 
 async function runBatchedTgsAnimations(wrapper) {
@@ -947,6 +1025,7 @@ function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
     const file = map[emoji];
     if (file) {
       const player = createTgsPlayer(file, 20, false, false, false);
+      player.dataset.tgs = '1';
       iconWrap.appendChild(player);
       if (wrapper) registerBatchedTgsPlayer(wrapper, player, index);
     } else {
@@ -1175,8 +1254,8 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
       ? { name: lp.name, username: lp.username || a.profileUsername, verified: a.isVerified }
       : { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
     avatarSrc  = own
-      ? (lp.avatar || a.avatarUrl || '/appimg/default_avatar.png')
-      : (a.avatarUrl || '/appimg/default_avatar.png');
+      ? (a.avatarPreviewUrl || getAvatarPreviewSrc(a.avatarUrl) || getProfileAvatarPreview(lp) || a.avatarUrl || '/appimg/default_avatar.png')
+      : (a.avatarPreviewUrl || getAvatarPreviewSrc(a.avatarUrl) || a.avatarUrl || '/appimg/default_avatar.png');
     isVerified = a.isVerified;
     badgeHtml  = isVerified
       ? `<img class="post__verified-badge" src="/appimg/verided.svg" alt="verified" />`
@@ -1234,11 +1313,13 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     <div class="post__images post__images--${Math.min(post.images.length, 4)}">
       ${post.images.slice(0, 4).map(m => {
         const item = typeof m === 'string'
-          ? { src: m, type: /\.(mp4|webm|mov)$/i.test(m) ? 'video' : 'image', mime: '' }
+          ? { src: m, fullSrc: m, previewSrc: m, type: /\.(mp4|webm|mov)$/i.test(m) ? 'video' : 'image', mime: '' }
           : m;
-        if (item.type === 'video') return `<div class="post__video-wrap" data-src="${item.src}"></div>`;
+        const previewSrc = item.previewSrc || item.src;
+        const fullSrc = item.fullSrc || item.src;
+        if (item.type === 'video') return `<div class="post__video-wrap" data-src="${previewSrc}" data-full-src="${fullSrc}"></div>`;
         const isGif = item.mime === 'image/gif' || item.src.startsWith('data:image/gif');
-        return `<img class="post__image${isGif ? ' post__image--gif' : ''}" src="${item.src}" alt="" />`;
+        return `<img class="post__image${isGif ? ' post__image--gif' : ''}" src="${previewSrc}" data-full-src="${fullSrc}" loading="lazy" decoding="async" alt="" />`;
       }).join('')}
     </div>` : ''}
     <div class="post__footer">
@@ -1261,7 +1342,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
   mountVideoPlayers(el);
 
-  requestAnimationFrame(() => {
+  const markTallPost = () => {
     const textEl = el.querySelector('.post__text');
     const footerEl = el.querySelector('.post__footer');
     if (textEl) {
@@ -1270,7 +1351,9 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
       if (isVerified && textEl.offsetHeight > lh * 1.8) el.classList.add('post--verified-tall');
     }
     if (isVerified && footerEl && footerEl.offsetHeight > 44) el.classList.add('post--verified-tall');
-  });
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(markTallPost, { timeout: 900 });
+  else requestAnimationFrame(markTallPost);
 
   return el;
 }

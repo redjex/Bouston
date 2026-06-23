@@ -760,6 +760,7 @@ function buildPostTextEl(text) {
 
 /* ── Server posts cache ─────────────────────── */
 const _serverPostsMap = new Map(); // id → post
+const _editingPostIds = new Set();
 
 function registerServerPost(post) {
   if (!post.reactions)   post.reactions   = {};
@@ -829,14 +830,23 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
 
 /* ── Shared post actions ────────────────────── */
 function startEditPost(id, postEl, onDone) {
+  const existingEditor = postEl.querySelector('.post__edit-area');
+  if (_editingPostIds.has(id) || postEl.classList.contains('post--editing') || existingEditor) {
+    existingEditor?.focus();
+    return;
+  }
+
   const isServer = _serverPostsMap.has(id);
   const post = isServer ? _serverPostsMap.get(id) : getPosts().find(p => p.id === id);
   if (!post) return;
+  _editingPostIds.add(id);
+  postEl.classList.add('post--editing');
 
   const textWrap = postEl.querySelector('.post__text-wrap') || postEl.querySelector('.post__text');
+  const originalText = post.text || '';
   const textarea = document.createElement('textarea');
   textarea.className = 'post__edit-area';
-  textarea.value     = post.text;
+  textarea.value     = originalText;
 
   const actions   = document.createElement('div');
   actions.className = 'post__edit-actions';
@@ -867,31 +877,83 @@ function startEditPost(id, postEl, onDone) {
   textarea.focus();
   textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
-  cancelBtn.addEventListener('click', onDone);
-  saveBtn.addEventListener('click', async () => {
+  const closeEditor = text => {
+    postEl.querySelectorAll('.post__edit-actions').forEach(el => el.remove());
+    postEl.querySelectorAll('.post__edit-area').forEach((el, index) => {
+      if (index === 0) el.replaceWith(buildPostTextEl(text));
+      else el.remove();
+    });
+    if (!postEl.querySelector('.post__text')) {
+      postEl.querySelector('.post__header')?.after(buildPostTextEl(text));
+    }
+    postEl.classList.remove('post--editing');
+    _editingPostIds.delete(id);
+  };
+  const failSave = message => {
+    saveBtn.disabled = false;
+    saveBtn.textContent = saveBtn.dataset.idleText || 'Сохранить';
+    delete saveBtn.dataset.idleText;
+    showPostError(message || 'Не удалось сохранить пост', saveBtn);
+  };
+
+  cancelBtn.addEventListener('click', e => {
+    e.preventDefault();
+    closeEditor(originalText);
+    onDone();
+  });
+  saveBtn.addEventListener('click', async e => {
+    e.preventDefault();
     const newText = textarea.value.trim();
-    if (!newText) return;
+    if (!newText) { failSave('Текст не может быть пустым'); return; }
+    saveBtn.dataset.idleText = saveBtn.textContent;
+    saveBtn.textContent = 'Сохранение...';
     saveBtn.disabled = true;
 
     if (isServer) {
       const u = window._tgUsername;
-      if (!u) { onDone(); return; }
+      if (!u) { failSave('Нужно войти в аккаунт'); return; }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
       try {
         const res = await apiFetch(`${API}/posts/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: newText }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
         if (res.ok) {
           const updated = await res.json();
-          _serverPostsMap.set(id, { ..._serverPostsMap.get(id), ...updated });
+          const nextPost = { ..._serverPostsMap.get(id), ...updated };
+          _serverPostsMap.set(id, nextPost);
+          mergeFeedPostsCache([nextPost]);
+          if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+        } else {
+          let message = 'Не удалось сохранить пост';
+          try {
+            const data = await res.json();
+            if (data?.detail) message = data.detail;
+          } catch {}
+          failSave(message);
+          return;
         }
-      } catch {}
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err.name === 'AbortError') {
+          failSave('Сервер не ответил, попробуй ещё раз');
+          return;
+        }
+        failSave('Нет соединения с сервером');
+        return;
+      }
     } else {
       const posts = getPosts();
       const p = posts.find(p => p.id === id);
       if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
     }
+    saveBtn.textContent = saveBtn.dataset.idleText || 'Сохранить';
+    delete saveBtn.dataset.idleText;
+    closeEditor(isServer ? (_serverPostsMap.get(id)?.text || newText) : newText);
     onDone();
   });
 }
@@ -905,8 +967,10 @@ function deletePost(id, onDone) {
         .catch(() => {});
     }
     _serverPostsMap.delete(id);
+    removePostFromPostsCaches(id);
   } else {
     savePosts(getPosts().filter(p => p.id !== id));
+    removePostFromPostsCaches(id);
   }
 
   const el = document.querySelector(`.post[data-post-id="${id}"]`);
@@ -1276,8 +1340,8 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
       ? { name: lp.name, username: lp.username || a.profileUsername, verified: a.isVerified }
       : { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
     avatarSrc  = own
-      ? (lp.avatar || a.avatarUrl || '../../img/default_avatar.png')
-      : (a.avatarUrl || '../../img/default_avatar.png');
+      ? (a.avatarPreviewUrl || getAvatarPreviewSrc(a.avatarUrl) || getProfileAvatarPreview(lp) || a.avatarUrl || '../../img/default_avatar.png')
+      : (a.avatarPreviewUrl || getAvatarPreviewSrc(a.avatarUrl) || a.avatarUrl || '../../img/default_avatar.png');
     isVerified = a.isVerified;
     badgeHtml  = isVerified
       ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`

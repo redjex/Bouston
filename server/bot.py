@@ -8,7 +8,7 @@ from aiogram.types import FSInputFile
 
 from auth import normalize
 from config import ADMIN_IDS, BANER_PATH, BOT_TOKEN, IMG_DIR
-from database import db_get_user, db_upsert_user
+from database import db_get_user, db_upsert_user, ensure_avatar_low, save_avatar_image
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +28,8 @@ async def fetch_and_save_avatar(user_id: int, username: str) -> str | None:
         await bot.download_file(file.file_path, buf)
 
         avatar_path = IMG_DIR / f"{username}.jpg"
-        avatar_path.write_bytes(buf.getvalue())
+        save_avatar_image(buf.getvalue(), avatar_path, size=640)
+        ensure_avatar_low(username, avatar_path)
         log.info("Avatar saved: %s", avatar_path)
         return str(avatar_path)
 

@@ -19,6 +19,7 @@ function showView(name) {
     renderProfile();
     renderProfilePosts();
     setScrollTopVisible(_profileWrap.scrollTop > 300);
+    updateProfileStickyCard();
   } else if (name === 'settings') {
     renderSettings();
     const settingsWrap = document.getElementById('settings-wrap');
@@ -27,8 +28,8 @@ function showView(name) {
     setScrollTopVisible(document.getElementById('user-profile-wrap').scrollTop > 300);
   }
   setProfileSettingsVisible(name === 'profile');
-  updateNavIndicator();
-  updateFloatingNavLayout();
+  if (name !== 'profile') setProfileStickyVisible(false);
+  requestAnimationFrame(updateNavIndicator);
 }
 
 document.getElementById('nav-home').addEventListener('click', () => showView('feed'));
@@ -39,32 +40,31 @@ const _scrollTopBtn = document.getElementById('btn-scroll-top');
 const _profileSettingsBtn = document.getElementById('btn-profile-settings');
 const _bottomNav = document.querySelector('.bottom-nav');
 const _bottomNavIndicator = document.getElementById('bottom-nav-indicator');
-const FLOATING_NAV_GAP = 8;
+const _profileStickyCard = document.getElementById('profile-sticky-card');
+let _scrollTopVisibleState = false;
+let _profileSettingsVisibleState = false;
+let _profileStickyVisibleState = false;
 
-function updateFloatingNavLayout() {
-  const items = [];
-  const settingsVisible = document.body.classList.contains('profile-settings-visible');
-  const scrollVisible = document.body.classList.contains('scroll-top-visible');
-
-  if (settingsVisible) items.push({ el: _profileSettingsBtn, kind: 'settings' });
-  items.push({ el: _bottomNav, kind: 'nav' });
-  if (scrollVisible) items.push({ el: _scrollTopBtn, kind: 'scroll' });
-
-  const widths = items.map(item => item.el.offsetWidth);
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + FLOATING_NAV_GAP * (items.length - 1);
-  let x = Math.round((window.innerWidth - totalWidth) / 2);
-
-  items.forEach((item, index) => {
-    const width = widths[index];
-    if (item.kind === 'nav') {
-      document.documentElement.style.setProperty('--bottom-nav-left', `${x + width / 2}px`);
-    } else if (item.kind === 'settings') {
-      document.documentElement.style.setProperty('--profile-settings-left', `${x}px`);
-    } else if (item.kind === 'scroll') {
-      document.documentElement.style.setProperty('--scroll-top-left', `${x}px`);
-    }
-    x += width + FLOATING_NAV_GAP;
+function normalizeStaticLabels() {
+  [
+    ['feed-compose-input', 'Напишите что нибудь...'],
+    ['profile-compose-input', 'Напишите что нибудь...'],
+  ].forEach(([id, text]) => {
+    const el = document.getElementById(id);
+    if (el) el.dataset.placeholder = text;
   });
+  const feedPostBtn = document.getElementById('feed-btn-post');
+  const profilePostBtn = document.getElementById('profile-btn-post');
+  if (feedPostBtn) feedPostBtn.textContent = 'Выставить';
+  if (profilePostBtn) profilePostBtn.textContent = 'Выставить';
+  document.querySelectorAll('label[for$="-photo-input"]').forEach(el => { el.title = 'Добавить фото'; });
+  document.querySelectorAll('.btn-emoji-open').forEach(el => { el.title = 'Добавить эмодзи'; });
+  const settingsBtn = document.getElementById('btn-profile-settings');
+  if (settingsBtn) settingsBtn.title = 'Настройки';
+  const navHome = document.getElementById('nav-home');
+  const navProfile = document.getElementById('nav-profile');
+  if (navHome) navHome.title = 'Главная';
+  if (navProfile) navProfile.title = 'Профиль';
 }
 
 function updateNavIndicator() {
@@ -83,25 +83,53 @@ function updateNavIndicator() {
   _bottomNavIndicator.classList.add('visible');
 }
 
-requestAnimationFrame(() => {
-  updateFloatingNavLayout();
-  updateNavIndicator();
-});
-window.addEventListener('resize', () => {
-  updateFloatingNavLayout();
-  updateNavIndicator();
-});
+requestAnimationFrame(updateNavIndicator);
+window.addEventListener('resize', updateNavIndicator);
 
 function setScrollTopVisible(visible) {
+  if (_scrollTopVisibleState === visible) return;
+  _scrollTopVisibleState = visible;
   _scrollTopBtn.classList.toggle('visible', visible);
   document.body.classList.toggle('scroll-top-visible', visible);
-  updateFloatingNavLayout();
 }
 
 function setProfileSettingsVisible(visible) {
+  if (_profileSettingsVisibleState === visible) return;
+  _profileSettingsVisibleState = visible;
   _profileSettingsBtn.classList.toggle('visible', visible);
   document.body.classList.toggle('profile-settings-visible', visible);
-  updateFloatingNavLayout();
+}
+
+function setProfileStickyVisible(visible) {
+  if (!_profileStickyCard || _profileStickyVisibleState === visible) return;
+  _profileStickyVisibleState = visible;
+  _profileStickyCard.classList.toggle('visible', visible);
+  _profileStickyCard.setAttribute('aria-hidden', visible ? 'false' : 'true');
+}
+
+function updateProfileStickyCard() {
+  if (_currentView !== 'profile') {
+    setProfileStickyVisible(false);
+    return;
+  }
+
+  const card = document.getElementById('profile-card');
+  if (!card) return;
+  const threshold = Math.max(120, card.offsetTop + card.offsetHeight - 54);
+  setProfileStickyVisible(_profileWrap.scrollTop > threshold);
+}
+
+function warmUpInterface() {
+  const run = () => {
+    loadEmojiList?.().catch?.(() => {});
+    ['/appimg/up.svg', '/appimg/settings.svg', '/appimg/comments.svg', '/appimg/default_avatar.png'].forEach(src => {
+      const img = new Image();
+      img.src = src;
+    });
+    updateNavIndicator();
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 1200 });
+  else setTimeout(run, 120);
 }
 
 _profileSettingsBtn.addEventListener('click', () => showView('settings'));
@@ -116,6 +144,7 @@ _profileWrap.addEventListener('scroll', () => {
   if (_currentView === 'profile') {
     setScrollTopVisible(_profileWrap.scrollTop > 300);
     document.getElementById('view-profile').classList.toggle('view--scrolled', _profileWrap.scrollTop > 10);
+    updateProfileStickyCard();
   }
 });
 document.getElementById('settings-wrap').addEventListener('scroll', () => {
@@ -174,8 +203,10 @@ async function initTgProfile() {
     if (tgUser.verified) p.verified = true;
     if (tgUser.avatar_b64) {
       p.avatar = tgUser.avatar_b64;
+      p.avatarPreview = tgUser.avatar_b64;
     } else if (tgUser.avatar_url) {
       p.avatar = tgUser.avatar_url;
+      p.avatarPreview = tgUser.avatar_preview_url || getAvatarPreviewSrc(tgUser.avatar_url);
     }
 
     if (!isProfileCacheFresh(p)) {
@@ -183,7 +214,8 @@ async function initTgProfile() {
         const uData = await fetchUserProfileCached(tgUser.username, { force: true });
         if (uData) {
         if (uData.banner_url) p.banner = uData.banner_url;
-        if (uData.avatar_url && !tgUser.avatar_b64) p.avatar = uData.avatar_url;
+        if (uData.avatar_url) p.avatar = uData.avatar_url;
+        if (uData.avatar_preview_url || uData.avatar_url) p.avatarPreview = uData.avatar_preview_url || getAvatarPreviewSrc(uData.avatar_url);
         if (uData.bio) p.bio = uData.bio;
         if (uData.display_name) p.name = uData.display_name;
         if (uData.profile_username) p.username = uData.profile_username;
@@ -194,7 +226,8 @@ async function initTgProfile() {
       const uData = getCachedUserProfile(tgUser.username);
       if (uData) {
         if (uData.banner_url) p.banner = uData.banner_url;
-        if (uData.avatar_url && !tgUser.avatar_b64) p.avatar = uData.avatar_url;
+        if (uData.avatar_url) p.avatar = uData.avatar_url;
+        if (uData.avatar_preview_url || uData.avatar_url) p.avatarPreview = uData.avatar_preview_url || getAvatarPreviewSrc(uData.avatar_url);
         if (uData.bio) p.bio = uData.bio;
         if (uData.display_name) p.name = uData.display_name;
         if (uData.profile_username) p.username = uData.profile_username;
@@ -207,23 +240,33 @@ async function initTgProfile() {
     saveProfile(p);
 
     const avatarSrc = p.avatar || '/appimg/default_avatar.png';
-    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar', 'profile-avatar'].forEach(id => {
+    const avatarPreviewSrc = getProfileAvatarPreview(p) || '/appimg/default_avatar.png';
+    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.src = avatarSrc;
+      if (el) el.src = avatarPreviewSrc;
     });
+    const profileAvatar = document.getElementById('profile-avatar');
+    if (profileAvatar) profileAvatar.src = avatarSrc;
   } catch {}
 }
 
 /* ── Real-time avatar updates (SSE) ─────────────── */
-function updateAvatarsInDom(username, avatarUrl) {
+function updateAvatarsInDom(username, avatarUrl, avatarPreviewUrl) {
+  const previewSrc = avatarPreviewUrl || getAvatarPreviewSrc(avatarUrl) || avatarUrl;
   document.querySelectorAll(`[data-author="${username}"] .avatar`).forEach(img => {
-    img.src = avatarUrl;
+    img.src = previewSrc;
   });
   if (username === window._tgUsername) {
-    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar', 'profile-avatar'].forEach(id => {
+    const p = getProfile();
+    p.avatar = avatarUrl || p.avatar;
+    p.avatarPreview = previewSrc || p.avatarPreview;
+    saveProfile(p);
+    ['feed-compose-avatar', 'profile-compose-avatar', 'thread-compose-avatar'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.src = avatarUrl;
+      if (el) el.src = previewSrc;
     });
+    const profileAvatar = document.getElementById('profile-avatar');
+    if (profileAvatar) profileAvatar.src = avatarUrl;
   }
 }
 
@@ -240,7 +283,7 @@ function connectEvents() {
   es.onmessage = e => {
     try {
       const data = JSON.parse(e.data);
-      if (data.type === 'avatar_update')   updateAvatarsInDom(data.username, data.avatarUrl);
+      if (data.type === 'avatar_update')   updateAvatarsInDom(data.username, data.avatarUrl, data.avatarPreviewUrl);
       if (data.type === 'new_post')        prependPostToFeed(data.post);
       if (data.type === 'reaction_update') applyReactionUpdate(data.postId, data.reactions);
     } catch {}
@@ -253,10 +296,13 @@ function connectEvents() {
   };
 }
 
+normalizeStaticLabels();
+
 if (checkAuth()) {
   initTgProfile().finally(() => {
     renderFeedComposeAvatar();
     renderFeedPosts();
     connectEvents();
+    warmUpInterface();
   });
 }

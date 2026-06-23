@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import io
 import json
 import time
 import uuid
@@ -19,6 +20,42 @@ from models import CreatePostRequest, EditPostRequest, ReactRequest
 from sse import broadcast_event
 
 router = APIRouter()
+
+try:
+    from PIL import Image, ImageOps
+except Exception:
+    Image = None
+    ImageOps = None
+
+
+IMAGE_EXTS = {"jpg", "jpeg", "png", "webp"}
+VIDEO_EXTS = {"mp4", "webm", "mov"}
+PREVIEW_DIR = POSTS_IMG_DIR / "previews"
+PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _media_ext_from_header(header: str) -> str:
+    if "gif" in header: return "gif"
+    if "png" in header: return "png"
+    if "webp" in header: return "webp"
+    if "mp4" in header: return "mp4"
+    if "webm" in header: return "webm"
+    if "quicktime" in header or "mov" in header: return "mov"
+    return "jpg"
+
+
+def _save_image_preview(raw: bytes, stem: str, ext: str) -> str | None:
+    if Image is None or ImageOps is None or ext.lower() not in IMAGE_EXTS:
+        return None
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            img = ImageOps.exif_transpose(img).convert("RGB")
+            img = ImageOps.fit(img, (320, 320), Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+            preview_name = f"{stem}.preview.jpg"
+            img.save(PREVIEW_DIR / preview_name, "JPEG", quality=72, optimize=True, progressive=True)
+            return f"previews/{preview_name}"
+    except Exception:
+        return None
 
 
 @router.get("/posts")
@@ -81,17 +118,21 @@ async def create_post(body: CreatePostRequest, username: str = Depends(require_a
         try:
             if "," in raw:
                 header, data = raw.split(",", 1)
-                ext = "jpg"
-                if "gif"  in header: ext = "gif"
-                elif "png"  in header: ext = "png"
-                elif "webp" in header: ext = "webp"
-                elif "mp4"  in header: ext = "mp4"
-                elif "webm" in header: ext = "webm"
+                ext = _media_ext_from_header(header)
             else:
                 data, ext = raw, "jpg"
-            filename = f"{uuid.uuid4().hex}.{ext}"
-            (POSTS_IMG_DIR / filename).write_bytes(base64.b64decode(data))
-            saved.append(filename)
+            stem = uuid.uuid4().hex
+            filename = f"{stem}.{ext}"
+            media_bytes = base64.b64decode(data)
+            (POSTS_IMG_DIR / filename).write_bytes(media_bytes)
+            preview = _save_image_preview(media_bytes, stem, ext)
+            media_type = "video" if ext.lower() in VIDEO_EXTS else "image"
+            saved.append({
+                "file": filename,
+                "preview": preview,
+                "type": media_type,
+                "mime": header.split(";", 1)[0].replace("data:", "") if "," in raw else "",
+            })
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning("Failed to save post image: %s", e)
@@ -152,9 +193,14 @@ async def delete_post_endpoint(post_id: int, username: str = Depends(require_aut
             raise HTTPException(404, "Пост не найден")
         if row["tg_username"] != username:
             raise HTTPException(403, "Нет доступа")
-        for filename in json.loads(row["images"] or "[]"):
+        for item in json.loads(row["images"] or "[]"):
+            filename = item if isinstance(item, str) else item.get("file")
+            preview = None if isinstance(item, str) else item.get("preview")
             try:
-                (POSTS_IMG_DIR / filename).unlink(missing_ok=True)
+                if filename:
+                    (POSTS_IMG_DIR / filename).unlink(missing_ok=True)
+                if preview:
+                    (POSTS_IMG_DIR / preview).unlink(missing_ok=True)
             except Exception:
                 pass
         await conn.execute("DELETE FROM posts WHERE id = ?", (post_id,))

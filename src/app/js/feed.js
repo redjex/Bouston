@@ -4,7 +4,8 @@ const _feedEl = document.getElementById('feed');
 
 function renderFeedComposeAvatar() {
   const el = document.getElementById('feed-compose-avatar');
-  if (el) el.src = getProfile().avatar || '../../img/default_avatar.png';
+  const p = getProfile();
+  if (el) el.src = getProfileAvatarPreview(p) || '../../img/default_avatar.png';
 }
 
 const FEED_PAGE = 20;
@@ -40,28 +41,45 @@ async function fetchFeedPage(page) {
 async function renderFeedPosts() {
   closeAllMenus();
   if (_feedObserver) { _feedObserver.disconnect(); _feedObserver = null; }
-  _feedPage   = 1;
-  _feedDone   = false;
+  _feedPage    = 1;
+  _feedDone    = false;
   _feedLoading = false;
 
   const container = document.getElementById('posts-container');
-  container.innerHTML = '<p class="feed__empty">Загрузка...</p>';
+  const cached = getFeedPostsCache();
+  if (cached.length) {
+    _renderFeedPostsList(container, cached);
+    _feedPage = Math.floor(cached.length / FEED_PAGE) + 1;
+    if (cached.length >= FEED_PAGE) _attachFeedSentinel(container);
+  } else {
+    container.innerHTML = '<p class="feed__empty">Загрузка...</p>';
+  }
 
   let posts;
   try { posts = await fetchFeedPage(1); }
-  catch { container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>'; return; }
-
-  if (!posts.length) {
-    container.innerHTML = '<p class="feed__empty">Постов пока нет — напишите первый!</p>';
+  catch {
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
     return;
   }
 
-  container.innerHTML = '';
-  posts.forEach(p => registerServerPost(p));
-  _appendPostsToFeed(container, posts, false);
-  _feedPage = 2;
+  if (!posts.length) {
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">Постов пока нет - напишите первый!</p>';
+    return;
+  }
+
+  const merged = mergeFeedPostsCache(posts);
+  _renderFeedPostsList(container, merged);
+  _feedPage = Math.floor(merged.length / FEED_PAGE) + 1;
   if (posts.length < FEED_PAGE) { _feedDone = true; return; }
   _attachFeedSentinel(container);
+}
+
+function _renderFeedPostsList(container, posts) {
+  if (_feedObserver) { _feedObserver.disconnect(); _feedObserver = null; }
+  container.innerHTML = '';
+  container.dataset.lastDateKey = '';
+  posts.forEach(p => registerServerPost(p));
+  _appendPostsToFeed(container, posts, false);
 }
 
 function _appendPostsToFeed(container, posts, append) {
@@ -96,7 +114,9 @@ function _attachFeedSentinel(container) {
     try {
       const posts = await fetchFeedPage(_feedPage);
       posts.forEach(p => registerServerPost(p));
-      _appendPostsToFeed(container, posts, true);
+      mergeFeedPostsCache(posts);
+      const freshPosts = posts.filter(p => !container.querySelector(`.post[data-post-id="${p.id}"]`));
+      _appendPostsToFeed(container, freshPosts, true);
       _feedPage++;
       if (posts.length < FEED_PAGE) { _feedDone = true; }
       else _attachFeedSentinel(container);
@@ -109,12 +129,11 @@ function _attachFeedSentinel(container) {
 function prependPostToFeed(post) {
   const container = document.getElementById('posts-container');
   if (!container) return;
-
-  // Не дублируем пост если он уже отрисован
   if (document.querySelector(`.post[data-post-id="${post.id}"]`)) return;
 
   post.isOwn = post.author?.tgUsername === window._tgUsername;
   registerServerPost(post);
+  mergeFeedPostsCache([post]);
 
   const postEl = buildPostEl(post, null, null, false, '', 0, false);
   postEl.classList.remove('post--enter');
@@ -127,15 +146,12 @@ function prependPostToFeed(post) {
     const firstPostTs = firstPost ? (_serverPostsMap.get(Number(firstPost.dataset.postId))?.createdAt || 0) : 0;
     const existingKey = firstPostTs ? getDateKey(firstPostTs) : null;
     if (existingKey === todayKey) {
-      // Уже есть разделитель за сегодня — вставляем пост после него
       firstChild.after(postEl);
     } else {
-      // Разделитель другого дня — вставляем свой разделитель + пост в начало
       container.prepend(postEl);
       container.prepend(buildDateSeparator(post.createdAt || post.id));
     }
   } else {
-    // Нет разделителей вообще (пустой фид или только текст загрузки)
     const emptyEl = container.querySelector('.feed__empty');
     if (emptyEl) emptyEl.remove();
     container.prepend(postEl);
@@ -168,14 +184,14 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
 
+    const post = await res.json();
     clearComposeInput('feed-compose-input');
     clearComposeImages('feed');
-    renderFeedPosts();
+    prependPostToFeed(post);
   } catch (err) {
     if (err.message === 'unauthorized') return;
     showPostError(err.message, btn);
   } finally {
-    // Кнопку разблокирует showPostError (при кулдауне) или сразу здесь
     if (!btn.textContent.match(/^\d+с$/)) btn.disabled = false;
   }
 });

@@ -20,7 +20,7 @@ function renderThread() {
   if (_threadPostId === null) return;
 
   const profile    = getProfile();
-  const avatarSrc  = profile.avatar || '../../img/default_avatar.png';
+  const avatarSrc  = getProfileAvatarPreview(profile) || '../../img/default_avatar.png';
   const isVerified = profile.verified === true;
   const badgeHtml  = isVerified
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
@@ -72,7 +72,7 @@ async function renderComments() {
 
   // local post
   const profile    = getProfile();
-  const avatarSrc  = profile.avatar || '../../img/default_avatar.png';
+  const avatarSrc  = getProfileAvatarPreview(profile) || '../../img/default_avatar.png';
   const isVerified = profile.verified === true;
   const comments   = getComments(_threadPostId);
 
@@ -140,8 +140,8 @@ function buildCommentEl(c, isServer) {
   // Для своих комментариев используем локальный профиль — он всегда актуален
   const _lp       = c.isOwn ? getProfile() : null;
   const avatarSrc = c.isOwn
-    ? (_lp.avatar || c.author.avatarUrl || '../../img/default_avatar.png')
-    : (c.author.avatarUrl || '../../img/default_avatar.png');
+    ? (getProfileAvatarPreview(_lp) || c.author.avatarPreviewUrl || getAvatarPreviewSrc(c.author.avatarUrl) || c.author.avatarUrl || '../../img/default_avatar.png')
+    : (c.author.avatarPreviewUrl || getAvatarPreviewSrc(c.author.avatarUrl) || c.author.avatarUrl || '../../img/default_avatar.png');
   const displayName = c.isOwn ? _lp.name : c.author.displayName;
   const badgeHtml = c.author.isVerified
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
@@ -316,6 +316,7 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
       author: {
         displayName: profile.name,
         avatarUrl:   profile.avatar || '../../img/default_avatar.png',
+        avatarPreviewUrl: getProfileAvatarPreview(profile) || '../../img/default_avatar.png',
         isVerified:  profile.verified === true,
       },
     };

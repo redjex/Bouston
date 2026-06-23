@@ -2,7 +2,6 @@
 
 const _profileWrap = document.getElementById('profile-wrap');
 
-/* ── Утилита: ссылки в bio ───────────────────── */
 function linkifyBio(text) {
   if (!text) return '';
   const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -22,22 +21,28 @@ document.getElementById('profile-bio').addEventListener('click', e => {
   window.electronAPI?.openExternal(a.href);
 });
 
-/* ── Render card ─────────────────────────────── */
 function renderProfile() {
   const p = getProfile();
 
-  document.getElementById('profile-avatar').src = p.avatar || '../../img/logo_blue.png';
+  const profileAvatar = document.getElementById('profile-avatar');
+  profileAvatar.onerror = () => { profileAvatar.onerror = null; profileAvatar.src = '../../img/default_avatar.png'; };
+  profileAvatar.src = p.avatar || '../../img/default_avatar.png';
 
   const bannerImg = document.getElementById('banner-img');
   const bannerPH  = document.getElementById('banner-placeholder');
+  bannerImg.onerror = () => {
+    bannerImg.onerror = null;
+    bannerImg.src = '../../img/baner.png';
+    bannerImg.classList.add('loaded');
+    bannerPH.style.display = 'none';
+  };
   if (p.banner) {
     bannerImg.src = p.banner;
     bannerImg.classList.add('loaded');
     bannerPH.style.display = 'none';
   } else {
-    bannerImg.src = '../../img/baner.png';
-    bannerImg.classList.add('loaded');
-    bannerPH.style.display = 'none';
+    bannerImg.classList.remove('loaded');
+    bannerPH.style.display = '';
   }
 
   document.getElementById('profile-name').textContent = p.name;
@@ -50,11 +55,11 @@ function renderProfile() {
   document.getElementById('input-name').value             = p.name;
   document.getElementById('input-username-profile').value = p.username ? '@' + p.username : '';
   document.getElementById('input-bio').value              = p.bio;
-  syncModalPreview('modal-avatar-preview', 'btn-pick-avatar', p.avatar || '../../img/logo_blue.png', true);
+  syncModalPreview('modal-avatar-preview', 'btn-pick-avatar', p.avatar || '../../img/default_avatar.png', true);
   if (p.banner) syncModalPreview('modal-banner-preview', 'btn-pick-banner', p.banner, false);
 
   const composeAvatar = document.getElementById('profile-compose-avatar');
-  if (composeAvatar) composeAvatar.src = p.avatar || '../../img/logo_blue.png';
+  if (composeAvatar) composeAvatar.src = getProfileAvatarPreview(p) || '../../img/default_avatar.png';
 }
 
 function syncModalPreview(imgId, btnId, src, alwaysShow) {
@@ -68,7 +73,6 @@ function syncModalPreview(imgId, btnId, src, alwaysShow) {
   }
 }
 
-/* ── Render profile posts ───────────────────── */
 let _profileObserver = null;
 
 function attachProfileMenu(container) {
@@ -77,7 +81,7 @@ function attachProfileMenu(container) {
     const btn    = wrap.querySelector('.post__more');
     const id     = Number(btn.dataset.id);
     const postEl = wrap.closest('.post');
-    btn.addEventListener('click', e => {
+    wrap.addEventListener('click', e => {
       e.stopPropagation();
       if (_openMenuId === id) { closeAllMenus(); return; }
       openPostMenu(id, postEl, _profileWrap, [
@@ -102,7 +106,12 @@ async function renderProfilePosts() {
     return;
   }
 
-  container.innerHTML = '<p class="feed__empty">Загрузка...</p>';
+  const cached = getProfilePostsCache(u);
+  if (cached.length) {
+    _renderProfilePostsList(container, cached);
+  } else {
+    container.innerHTML = '<p class="feed__empty">Загрузка...</p>';
+  }
 
   let posts;
   try {
@@ -110,15 +119,20 @@ async function renderProfilePosts() {
     if (!res.ok) throw new Error();
     posts = await res.json();
   } catch {
-    container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
     return;
   }
 
   if (!posts.length) {
-    container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
     return;
   }
 
+  const merged = mergeProfilePostsCache(u, posts);
+  _renderProfilePostsList(container, merged);
+}
+
+function _renderProfilePostsList(container, posts) {
   container.innerHTML = '';
   let lastDateKey = null;
   posts.forEach((post, i) => {
@@ -133,10 +147,40 @@ async function renderProfilePosts() {
   });
   attachProfileMenu(container);
 }
+function prependPostToProfile(post) {
+  const container = document.getElementById('profile-posts-container');
+  if (!container) return;
+  if (container.querySelector(`.post[data-post-id="${post.id}"]`)) return;
 
-/* ── Modal ───────────────────────────────────── */
-let _pendingAvatar   = undefined;
-let _pendingBanner   = undefined;
+  post.isOwn = post.author?.tgUsername === window._tgUsername;
+  registerServerPost(post);
+  if (window._tgUsername) mergeProfilePostsCache(window._tgUsername, [post]);
+
+  const emptyEl = container.querySelector('.feed__empty');
+  if (emptyEl) emptyEl.remove();
+
+  const postEl = buildPostEl(post, null, null, false, '', 0, true);
+  postEl.classList.remove('post--enter');
+
+  const postKey = getDateKey(post.createdAt || post.id);
+  const firstPost = container.querySelector('.post[data-post-id]');
+  const firstPostTs = firstPost ? (_serverPostsMap.get(Number(firstPost.dataset.postId))?.createdAt || 0) : 0;
+  const firstKey = firstPostTs ? getDateKey(firstPostTs) : null;
+  const firstChild = container.firstElementChild;
+
+  if (firstChild && firstChild.classList.contains('date-separator') && firstKey === postKey) {
+    firstChild.after(postEl);
+  } else {
+    container.prepend(postEl);
+    container.prepend(buildDateSeparator(post.createdAt || post.id));
+  }
+
+  attachProfileMenu(container);
+}
+
+/* в”Ђв”Ђ Modal в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+let _pendingAvatar    = undefined;
+let _pendingBanner    = undefined;
 let _originalUsername = '';
 
 function openModal() {
@@ -148,7 +192,7 @@ function openModal() {
   document.getElementById('input-username-profile').value = p.username ? '@' + p.username : '';
   document.getElementById('input-bio').value              = p.bio;
   const avatarImg = document.getElementById('modal-avatar-preview');
-  avatarImg.src = p.avatar || '../../img/logo_blue.png';
+  avatarImg.src = p.avatar || '../../img/default_avatar.png';
   avatarImg.style.display = 'block';
   document.getElementById('btn-pick-avatar').classList.add('has-image');
 
@@ -254,71 +298,75 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   const newAvatar  = _pendingAvatar;
   const newBanner  = _pendingBanner;
 
-  // ── Клиентская валидация юзернейма ──────────────────
   if (newUser) {
-    if (newUser.length < 3) {
-      showFieldError('input-username-profile', 'Минимум 3 символа');
-      return;
-    }
-    if (newUser.length > 20) {
-      showFieldError('input-username-profile', 'Максимум 20 символов');
-      return;
-    }
+    if (newUser.length < 3) { showFieldError('input-username-profile', 'Минимум 3 символа'); return; }
+    if (newUser.length > 20) { showFieldError('input-username-profile', 'Максимум 20 символов'); return; }
   }
   clearFieldError('input-username-profile');
 
   const usernameChanged = newUser !== _originalUsername;
 
-  // ── Если юзернейм меняется — сначала проверяем на сервере ──
-  if (usernameChanged) {
-    const btn = document.getElementById('btn-save');
-    btn.disabled = true;
-    try {
-      const tgUser = await window.electronAPI?.getTgUser();
-      if (tgUser?.username) {
-        const res = await apiFetch('https://bouston.xyz/profile', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tg_username:      tgUser.username,
-            display_name:     newName || p.name,
-            profile_username: newUser || null,
-            bio:              newBio  || p.bio,
-            avatar_b64:       newAvatar !== undefined ? newAvatar : null,
-            banner_b64:       newBanner !== undefined ? newBanner : null,
-          }),
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          showFieldError('input-username-profile', d.detail || 'Ошибка сервера');
-          return;
-        }
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
 
-        // Сервер одобрил — мгновенно обновляем @handle на всех постах
-        if (newUser && window._tgUsername) {
-          const handle = '@' + newUser.toLowerCase();
-          document.querySelectorAll(`[data-author="${window._tgUsername}"] .post__handle`).forEach(el => {
-            el.textContent = handle;
-          });
-        }
+  try {
+    const tgUsername = window._tgUsername;
+    if (tgUsername) {
+      const res = await apiFetch(`${API}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tg_username:      tgUsername,
+          display_name:     newName || p.name,
+          profile_username: newUser || null,
+          bio:              newBio  || p.bio,
+          avatar_b64:       newAvatar !== undefined ? newAvatar : null,
+          banner_b64:       newBanner !== undefined ? newBanner : null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showFieldError('input-username-profile', d.detail || 'Ошибка сервера');
+        return;
       }
-    } catch (err) {
-      if (err.message !== 'unauthorized') showFieldError('input-username-profile', 'Нет соединения с сервером');
-      return;
-    } finally {
-      btn.disabled = false;
+
+      if (usernameChanged && newUser && window._tgUsername) {
+        const handle = '@' + newUser.toLowerCase();
+        document.querySelectorAll(`[data-author="${window._tgUsername}"] .post__handle`).forEach(el => {
+          el.textContent = handle;
+        });
+      }
     }
+  } catch (err) {
+    if (err.message !== 'unauthorized') showFieldError('input-username-profile', 'Нет соединения с сервером');
+    return;
+  } finally {
+    btn.disabled = false;
   }
 
-  // ── Сервер ок (или юзернейм не менялся) — применяем локально ──
   p.name = newName || p.name;
   p.username = newUser || p.username;
   p.bio      = newBio  || p.bio;
-  if (newAvatar !== undefined) p.avatar = newAvatar;
-  if (newBanner  !== undefined) p.banner = newBanner;
+  if (newAvatar !== undefined) {
+    p.avatar = newAvatar;
+    p.avatarPreview = newAvatar;
+  }
+  if (newBanner !== undefined) p.banner = newBanner;
 
   invalidateProfileCache();
   saveProfile(p);
+  if (window._tgUsername) {
+    saveCachedUserProfile(window._tgUsername, {
+      username: window._tgUsername,
+      display_name: p.name,
+      profile_username: p.username,
+      bio: p.bio,
+      verified: p.verified,
+      avatar_url: p.avatar,
+      avatar_preview_url: getProfileAvatarPreview(p) || p.avatar,
+      banner_url: p.banner,
+    });
+  }
   closeModal();
   renderProfile();
   refreshPostsVerifiedState(p.verified);
@@ -336,29 +384,9 @@ document.getElementById('btn-save').addEventListener('click', async () => {
       el.textContent = p.name;
     });
   }
-
-  // ── Если юзернейм не менялся — шлём остальные изменения на сервер ──
-  if (!usernameChanged) {
-    try {
-      const tgUser = await window.electronAPI?.getTgUser();
-      if (tgUser?.username) {
-        await apiFetch('https://bouston.xyz/profile', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tg_username: tgUser.username,
-            display_name: p.name,
-            bio:          p.bio,
-            avatar_b64:   newAvatar !== undefined ? newAvatar : null,
-            banner_b64:   newBanner !== undefined ? newBanner : null,
-          }),
-        });
-      }
-    } catch {}
-  }
 });
 
-/* ── Profile compose ─────────────────────────── */
+/* в”Ђв”Ђ Profile compose в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 document.getElementById('profile-btn-post').addEventListener('click', async () => {
   const text   = getComposeText('profile-compose-input').trim();
   const images = getComposeImages('profile');
@@ -368,23 +396,19 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
   btn.disabled = true;
 
   try {
-    const u = window._tgUsername;
-    if (!u) throw new Error('not logged in');
-
     const res = await apiFetch(`${API}/posts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        images: images.map(m => m.src),
-      }),
+      body: JSON.stringify({ text, images: images.map(m => m.src) }),
     });
     if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
 
+    const post = await res.json();
     clearComposeInput('profile-compose-input');
     clearComposeImages('profile');
-    renderProfilePosts();
+    prependPostToProfile(post);
+    if (typeof prependPostToFeed === 'function') prependPostToFeed(post);
   } catch (err) {
     if (err.message === 'unauthorized') return;
     showPostError(err.message, btn);
