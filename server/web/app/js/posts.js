@@ -1325,7 +1325,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     <div class="post__footer">
       <div class="post__reactions-wrap">
         <div class="post__reactions" data-post-id="${post.id}"></div>
-        <button class="btn-comments" onclick="openThread(${post.id})">
+        <button class="btn-comments" data-thread="${post.id}">
           <img class="btn-comments__icon" src="/appimg/comments.svg" alt="" />
           ${(() => { const cnt = post.author ? (post.commentCount || 0) : getComments(post.id).length; return cnt ? `<span class="btn-comments__count">${cnt}</span>` : ''; })()}
         </button>

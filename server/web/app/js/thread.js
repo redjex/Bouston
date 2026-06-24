@@ -242,8 +242,7 @@ function _updateCommentCountEl(btn, count) {
 
 function refreshCommentCount(postId) {
   document.querySelectorAll('.btn-comments').forEach(btn => {
-    const onclick = btn.getAttribute('onclick') || '';
-    if (onclick.includes(postId)) _updateCommentCountEl(btn, getComments(postId).length);
+    if (Number(btn.dataset.thread) === postId) _updateCommentCountEl(btn, getComments(postId).length);
   });
 }
 
@@ -253,11 +252,15 @@ async function _refreshServerCommentCount(postId) {
     if (!res.ok) return;
     const comments = await res.json();
     document.querySelectorAll('.btn-comments').forEach(btn => {
-      const onclick = btn.getAttribute('onclick') || '';
-      if (onclick.includes(postId)) _updateCommentCountEl(btn, comments.length);
+      if (Number(btn.dataset.thread) === postId) _updateCommentCountEl(btn, comments.length);
     });
   } catch {}
 }
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-comments[data-thread]');
+  if (btn) openThread(Number(btn.dataset.thread));
+});
 
 document.getElementById('thread-back').addEventListener('click', closeThread);
 
