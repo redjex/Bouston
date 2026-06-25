@@ -73,7 +73,7 @@ def _save_video_preview(video_path: Path, stem: str) -> str | None:
                 "-ss", "00:00:00.250",
                 "-i", str(video_path),
                 "-frames:v", "1",
-                "-vf", "scale=320:320:force_original_aspect_ratio=increase,crop=320:320,boxblur=8:1",
+                "-vf", "scale=320:320:force_original_aspect_ratio=increase,crop=320:320",
                 "-q:v", "8",
                 str(preview_path),
             ],

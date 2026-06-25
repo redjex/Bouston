@@ -185,6 +185,13 @@
 
   document.addEventListener('click', e => {
     if (e.target.closest('.lightbox__close') || e.target.closest('.lightbox__tool')) return;
+    const playControl = e.target.closest('.vplayer__control');
+    if (playControl) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleInlineVideo(playControl.closest('.vplayer'));
+      return;
+    }
     const vidWrap = e.target.closest('.post__video');
     if (vidWrap) {
       const { items, index } = collectPostItems(vidWrap);
@@ -373,16 +380,35 @@ function buildVideoPlayer(src, extraClass = '', fullSrc = src) {
   wrap.className = 'vplayer' + (extraClass ? ' ' + extraClass : '');
   wrap.dataset.src = src;
   wrap.dataset.fullSrc = fullSrc || src;
+  wrap.dataset.ready = '0';
 
   const vid = document.createElement('video');
   vid.className   = 'vplayer__video';
-  if (src === fullSrc) vid.src = src;
+  vid.src          = fullSrc || src;
   vid.poster      = src;
   vid.preload     = 'metadata';
   vid.muted       = true;
-  vid.loop        = true;
+  vid.loop        = false;
   vid.playsInline = true;
   wrap.appendChild(vid);
+
+  const control = document.createElement('button');
+  control.type = 'button';
+  control.className = 'vplayer__control vplayer__control--loading';
+  control.setAttribute('aria-label', 'Загрузка видео');
+  control.innerHTML = `
+    <span class="vplayer__spinner" aria-hidden="true"></span>
+    <img class="vplayer__play" src="/appimg/play.svg" alt="" aria-hidden="true" />
+    <img class="vplayer__stop" src="/appimg/stop.svg" alt="" aria-hidden="true" />
+  `;
+  wrap.appendChild(control);
+
+  vid.addEventListener('play', () => wrap.classList.add('vplayer--playing'));
+  vid.addEventListener('pause', () => wrap.classList.remove('vplayer--playing'));
+  vid.addEventListener('ended', () => {
+    wrap.classList.remove('vplayer--playing');
+    vid.currentTime = 0;
+  });
 
   return wrap;
 }
@@ -454,24 +480,52 @@ function hydratePostImage(img) {
 function hydratePostVideo(player) {
   const vid = player.querySelector('.vplayer__video');
   const fullSrc = player.dataset.fullSrc;
-  if (!vid || !fullSrc || fullSrc === vid.src || player.dataset.loadingFull === '1') return;
+  const control = player.querySelector('.vplayer__control');
+  if (!vid || !fullSrc || player.dataset.loadingFull === '1') return;
   player.dataset.loadingFull = '1';
   player.classList.add('vplayer--previewing');
-  const progress = createMediaProgress();
-  player.appendChild(progress);
-  loadMediaBlobWithProgress(fullSrc, pct => setMediaProgress(progress, pct))
+  if (control) {
+    control.classList.add('vplayer__control--loading');
+    control.setAttribute('aria-label', 'Загрузка видео');
+  }
+  loadMediaBlobWithProgress(fullSrc, () => {})
     .then(blobUrl => {
+      vid.onloadedmetadata = () => {
+        vid.currentTime = 0;
+      };
       vid.onloadeddata = () => {
         player.classList.remove('vplayer--previewing');
-        progress.remove();
+        player.dataset.ready = '1';
+        if (control) {
+          control.classList.remove('vplayer__control--loading');
+          control.setAttribute('aria-label', 'Включить видео');
+        }
       };
       vid.src = blobUrl;
       vid.load();
     })
     .catch(() => {
       player.classList.remove('vplayer--previewing');
-      progress.remove();
+      player.dataset.ready = '1';
+      if (control) {
+        control.classList.remove('vplayer__control--loading');
+        control.setAttribute('aria-label', 'Включить видео');
+      }
     });
+}
+
+function toggleInlineVideo(player) {
+  if (!player || player.dataset.ready !== '1') return;
+  const vid = player.querySelector('.vplayer__video');
+  if (!vid) return;
+  if (vid.paused) {
+    document.querySelectorAll('.vplayer__video').forEach(other => {
+      if (other !== vid && !other.paused) other.pause();
+    });
+    vid.play().catch(() => {});
+  } else {
+    vid.pause();
+  }
 }
 
 function mountVideoPlayers(container) {

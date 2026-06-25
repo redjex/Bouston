@@ -512,27 +512,6 @@ body.no-verified-gradients .post__verified-bg {
 	 background: #c8344d !important;
 	 color: #fff !important;
 }
-.admin-panel__row {
-	 display: flex;
-	 gap: 8px;
-}
-.admin-panel__input {
-	 width: 100%;
-	 height: 42px;
-	 border: 1px solid rgba(255,255,255,0.12);
-	 border-radius: 12px;
-	 background: rgba(255,255,255,0.07);
-	 color: #fff;
-	 padding: 0 14px;
-	 font: 600 1.3rem 'Inter', sans-serif;
-	 outline: none;
-}
-.admin-panel__actions {
-	 display: grid;
-	 grid-template-columns: repeat(2, minmax(0, 1fr));
-	 gap: 8px;
-	 margin-top: 10px;
-}
  .color-pick {
 	 height: 48px;
 	 border-radius: 16px;
@@ -1690,7 +1669,7 @@ body.no-verified-gradients .post__verified-bg {
 }
 .post__image--previewing,
 .vplayer--previewing .vplayer__video {
-	 filter: blur(12px);
+	 filter: saturate(0.92) brightness(0.82);
 }
 .media-progress {
 	 --media-progress: 0;
@@ -1858,6 +1837,91 @@ body.no-verified-gradients .post__verified-bg {
 	 object-fit: contain;
 	 display: block;
 	 transition: filter 0.24s ease;
+}
+.vplayer__control {
+	 position: absolute;
+	 left: 50%;
+	 top: 50%;
+	 width: 34px;
+	 height: 40px;
+	 transform: translate(-50%, -50%);
+	 border: 0;
+	 border-radius: 0;
+	 background: transparent;
+	 color: #fff;
+	 display: flex;
+	 align-items: center;
+	 justify-content: center;
+	 cursor: pointer;
+	 z-index: 5;
+	 padding: 0;
+	 filter: drop-shadow(0 6px 14px rgba(0,0,0,0.55));
+	 transition: transform 0.16s ease, opacity 0.16s ease;
+}
+.vplayer__control:hover {
+	 transform: translate(-50%, -50%) scale(1.04);
+}
+.vplayer--playing .vplayer__control {
+	 opacity: 0;
+	 pointer-events: none;
+}
+.vplayer:hover.vplayer--playing .vplayer__control {
+	 opacity: 1;
+	 pointer-events: auto;
+}
+.vplayer__play,
+.vplayer__stop {
+	 width: 28px;
+	 height: 33px;
+	 margin-left: 3px;
+	 display: block;
+}
+.vplayer__stop {
+	 display: none;
+	 width: 22px;
+	 height: 32px;
+	 margin-left: 0;
+}
+.vplayer--playing .vplayer__play {
+	 display: none;
+}
+.vplayer--playing .vplayer__stop {
+	 display: block;
+}
+.vplayer__spinner {
+	 display: none;
+	 width: 28px;
+	 height: 28px;
+	 border: 3px solid rgba(255,255,255,0.26);
+	 border-top-color: #fff;
+	 border-radius: 50%;
+	 animation: video-spin 0.8s linear infinite;
+}
+.vplayer__control--loading {
+	 cursor: default;
+}
+.vplayer__control--loading .vplayer__spinner {
+	 display: block;
+}
+.vplayer__control--loading .vplayer__play {
+	 display: none;
+}
+.vplayer__control--loading .vplayer__stop {
+	 display: none;
+}
+.lightbox__tool-icon {
+	 width: 18px;
+	 height: 22px;
+	 display: block;
+}
+.lightbox__tool-icon--stop {
+	 width: 16px;
+	 height: 22px;
+}
+@keyframes video-spin {
+	 to {
+		 transform: rotate(360deg);
+	}
 }
  .lightbox__toolbar--video {
 	 width: min(700px,90vw);
