@@ -63,11 +63,14 @@ async function renderFeedPosts() {
   }
 
   if (!posts.length) {
+    reconcileFeedPostsCache(posts, FEED_PAGE);
+    handleDeletedPostsMissingFromDom(container);
     if (!cached.length) container.innerHTML = '<p class="feed__empty">Постов пока нет - напишите первый!</p>';
     return;
   }
 
-  const merged = mergeFeedPostsCache(posts);
+  const merged = reconcileFeedPostsCache(posts, FEED_PAGE);
+  handleDeletedPostsMissingFromDom(container);
   _renderFeedPostsList(container, merged);
   _feedPage = Math.floor(merged.length / FEED_PAGE) + 1;
   if (posts.length < FEED_PAGE) { _feedDone = true; return; }
@@ -97,6 +100,13 @@ function _appendPostsToFeed(container, posts, append) {
 
   container.dataset.lastDateKey = lastDateKey || '';
   attachFeedMenu(container);
+}
+
+function handleDeletedPostsMissingFromDom(container) {
+  const cachedIds = new Set(getFeedPostsCache().map(post => Number(post.id)));
+  container.querySelectorAll('.post[data-post-id]').forEach(postEl => {
+    if (!cachedIds.has(Number(postEl.dataset.postId))) removePostElWithSeparator(postEl);
+  });
 }
 
 function _attachFeedSentinel(container) {
@@ -133,6 +143,7 @@ function prependPostToFeed(post) {
 
   post.isOwn = post.author?.tgUsername === window._tgUsername;
   registerServerPost(post);
+  notifyAboutPostMention(post);
   mergeFeedPostsCache([post]);
 
   const postEl = buildPostEl(post, null, null, false, '', 0, false);

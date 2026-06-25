@@ -115,13 +115,16 @@ async function refreshFeedFromServer(container, options = {}) {
     }
 
     if (!posts.length) {
+      reconcileFeedPostsCache(posts, FEED_PAGE);
+      handleDeletedPostsMissingFromDom(container);
       if (!options.hadCache && !container.querySelector('.post[data-post-id]')) {
         container.innerHTML = '<p class="feed__empty">Постов пока нет - напишите первый!</p>';
       }
       return;
     }
 
-    const merged = mergeFeedPostsCache(posts);
+    const merged = reconcileFeedPostsCache(posts, FEED_PAGE);
+    handleDeletedPostsMissingFromDom(container);
     if (options.allowInitialRender && !options.hadCache) {
       _renderFeedPostsList(container, merged);
     } else {
@@ -171,6 +174,13 @@ function renderFeedIfMissingPosts(container, posts) {
 
 function findFeedPostEl(container, id) {
   return container.querySelector(`.post[data-post-id="${id}"]`);
+}
+
+function handleDeletedPostsMissingFromDom(container) {
+  const cachedIds = new Set(getFeedPostsCache().map(post => Number(post.id)));
+  container.querySelectorAll('.post[data-post-id]').forEach(postEl => {
+    if (!cachedIds.has(Number(postEl.dataset.postId))) removePostElWithSeparator(postEl);
+  });
 }
 
 function syncFeedPostsIntoDom(container, posts) {
@@ -274,6 +284,7 @@ function prependPostToFeed(post) {
   if (!container) return;
   post.isOwn = post.author?.tgUsername === window._tgUsername;
   registerServerPost(post);
+  notifyAboutPostMention(post);
   const merged = mergeFeedPostsCache([post]);
   if (container.querySelector('.post[data-post-id]')) {
     syncFeedPostsIntoDom(container, merged);

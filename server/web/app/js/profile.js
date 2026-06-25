@@ -151,13 +151,15 @@ async function refreshProfilePostsFromServer(container, username, options = {}) 
     }
 
     if (!posts.length) {
+      reconcileProfilePostsCache(username, posts);
+      container.querySelectorAll('.post[data-post-id]').forEach(removePostElWithSeparator);
       if (!options.hadCache && !container.querySelector('.post[data-post-id]')) {
         container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
       }
       return;
     }
 
-    const merged = mergeProfilePostsCache(username, posts);
+    const merged = reconcileProfilePostsCache(username, posts);
     if (options.allowInitialRender && !options.hadCache) {
       _renderProfilePostsList(container, merged);
     } else {

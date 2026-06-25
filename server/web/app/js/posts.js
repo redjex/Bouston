@@ -629,27 +629,6 @@ function isHeartOnly(text) {
   return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
 }
 
-let _notificationAudio = null;
-
-function playNotificationSound() {
-  if (!_notificationAudio) {
-    _notificationAudio = new Audio('/web/app/audio/notification.mp3');
-    _notificationAudio.volume = 0.5;
-  }
-  _notificationAudio.currentTime = 0;
-  _notificationAudio.play().catch(() => {});
-}
-
-function checkMention(text, authorUsername) {
-  const currentUser = window._tgUsername;
-  if (!currentUser || !text) return;
-  if (authorUsername === currentUser) return;
-  const mentionRegex = new RegExp(`@${currentUser.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$|[.,!?;:]|\\n)`, 'i');
-  if (mentionRegex.test(text)) {
-    playNotificationSound();
-  }
-}
-
 let _emojiRegex = null;
 let _emojiMap   = null;
 
@@ -732,9 +711,6 @@ function registerServerPost(post) {
   _serverPostsMap.set(post.id, post);
 
   // Проверяем упоминание при регистрации поста
-  if (post.text && post.author?.tgUsername) {
-    checkMention(post.text, post.author.tgUsername);
-  }
 }
 
 function getPostById(id) {
@@ -923,26 +899,54 @@ function startEditPost(id, postEl, onDone) {
 }
 
 function deletePost(id, onDone) {
-  removePostFromPostsCaches(id);
   if (_serverPostsMap.has(id)) {
     apiFetch(`${API}/posts/${id}`, { method: 'DELETE' }).catch(() => {});
-    _serverPostsMap.delete(id);
   } else {
     savePosts(getPosts().filter(p => p.id !== id));
   }
 
-  const el = document.querySelector(`.post[data-post-id="${id}"]`);
-  if (el) {
-    const prev = el.previousElementSibling;
-    const next = el.nextElementSibling;
-    if (prev?.classList.contains('date-separator') &&
-        (!next || next.classList.contains('date-separator') || next.classList.contains('feed-sentinel'))) {
-      prev.remove();
-    }
-    el.remove();
-    return;
-  }
+  handleDeletedPost(id);
   onDone();
+}
+
+function removeCachedCommentsForPost(id) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
+    delete all[id];
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function removePostElWithSeparator(postEl) {
+  const container = postEl.parentElement;
+  const prev = postEl.previousElementSibling;
+  const next = postEl.nextElementSibling;
+  postEl.remove();
+
+  if (prev?.classList.contains('date-separator') &&
+      (!next || next.classList.contains('date-separator') || next.classList.contains('feed-sentinel'))) {
+    prev.remove();
+  }
+
+  if (container?.id === 'posts-container' && typeof normalizeFeedDateSeparators === 'function') {
+    normalizeFeedDateSeparators(container);
+  }
+}
+
+function handleDeletedPost(id) {
+  const postId = Number(id);
+  if (!postId) return;
+
+  removePostFromPostsCaches(postId);
+  savePosts(getPosts().filter(p => Number(p.id) !== postId));
+  removeCachedCommentsForPost(postId);
+  _serverPostsMap.delete(postId);
+
+  document.querySelectorAll(`.post[data-post-id="${postId}"]`).forEach(removePostElWithSeparator);
+
+  if (typeof _threadPostId !== 'undefined' && Number(_threadPostId) === postId) {
+    closeThread?.();
+  }
 }
 
 function pinPost(id, onDone) {

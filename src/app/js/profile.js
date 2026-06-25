@@ -124,11 +124,13 @@ async function renderProfilePosts() {
   }
 
   if (!posts.length) {
+    reconcileProfilePostsCache(u, posts);
+    container.querySelectorAll('.post[data-post-id]').forEach(removePostElWithSeparator);
     if (!cached.length) container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
     return;
   }
 
-  const merged = mergeProfilePostsCache(u, posts);
+  const merged = reconcileProfilePostsCache(u, posts);
   _renderProfilePostsList(container, merged);
 }
 

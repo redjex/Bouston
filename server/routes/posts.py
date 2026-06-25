@@ -205,6 +205,7 @@ async def delete_post_endpoint(post_id: int, username: str = Depends(require_aut
                 pass
         await conn.execute("DELETE FROM posts WHERE id = ?", (post_id,))
         await conn.commit()
+    asyncio.create_task(broadcast_event({"type": "post_deleted", "postId": post_id}))
     return {"ok": True}
 
 

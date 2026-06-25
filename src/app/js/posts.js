@@ -973,25 +973,52 @@ function deletePost(id, onDone) {
       apiFetch(`${API}/posts/${id}`, { method: 'DELETE' })
         .catch(() => {});
     }
-    _serverPostsMap.delete(id);
-    removePostFromPostsCaches(id);
   } else {
     savePosts(getPosts().filter(p => p.id !== id));
-    removePostFromPostsCaches(id);
   }
 
-  const el = document.querySelector(`.post[data-post-id="${id}"]`);
-  if (el) {
-    const prev = el.previousElementSibling;
-    const next = el.nextElementSibling;
-    if (prev?.classList.contains('date-separator') &&
-        (!next || next.classList.contains('date-separator') || next.classList.contains('feed-sentinel'))) {
-      prev.remove();
-    }
-    el.remove();
-    return;
-  }
+  handleDeletedPost(id);
   onDone();
+}
+
+function removeCachedCommentsForPost(id) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
+    delete all[id];
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function removePostElWithSeparator(postEl) {
+  const container = postEl.parentElement;
+  const prev = postEl.previousElementSibling;
+  const next = postEl.nextElementSibling;
+  postEl.remove();
+
+  if (prev?.classList.contains('date-separator') &&
+      (!next || next.classList.contains('date-separator') || next.classList.contains('feed-sentinel'))) {
+    prev.remove();
+  }
+
+  if (container?.id === 'posts-container' && typeof normalizeFeedDateSeparators === 'function') {
+    normalizeFeedDateSeparators(container);
+  }
+}
+
+function handleDeletedPost(id) {
+  const postId = Number(id);
+  if (!postId) return;
+
+  removePostFromPostsCaches(postId);
+  savePosts(getPosts().filter(p => Number(p.id) !== postId));
+  removeCachedCommentsForPost(postId);
+  _serverPostsMap.delete(postId);
+
+  document.querySelectorAll(`.post[data-post-id="${postId}"]`).forEach(removePostElWithSeparator);
+
+  if (typeof _threadPostId !== 'undefined' && Number(_threadPostId) === postId) {
+    closeThread?.();
+  }
 }
 
 function pinPost(id, onDone) {

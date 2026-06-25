@@ -98,6 +98,26 @@ function mergeFeedPostsCache(posts) {
   return merged;
 }
 
+function reconcileFeedPostsCache(serverPosts, pageLimit = 20) {
+  const serverIds = new Set(serverPosts.map(post => Number(post.id)));
+  let next = getFeedPostsCache();
+
+  if (!serverPosts.length) {
+    next = [];
+  } else if (serverPosts.length < pageLimit) {
+    next = next.filter(post => serverIds.has(Number(post.id)));
+  } else {
+    const oldestServerTs = Math.min(...serverPosts.map(post => post.createdAt || post.id || 0));
+    next = next.filter(post => {
+      const ts = post.createdAt || post.id || 0;
+      return ts < oldestServerTs || serverIds.has(Number(post.id));
+    });
+  }
+
+  saveFeedPostsCache(next);
+  return mergeFeedPostsCache(serverPosts);
+}
+
 function getProfilePostsCache(username = getProfile().tgUsername || window._tgUsername || '') {
   const all = readPostsCache(scopedStorageKey(PROFILE_POSTS_CACHE_KEY));
   return sortProfilePosts(all.filter(post => !username || post.author?.tgUsername === username || post.isOwn));
@@ -113,6 +133,11 @@ function mergeProfilePostsCache(username, posts) {
   const merged = sortProfilePosts(mergePostsById(getProfilePostsCache(username), posts));
   saveProfilePostsCache(username, merged);
   return merged;
+}
+
+function reconcileProfilePostsCache(username, serverPosts) {
+  saveProfilePostsCache(username, serverPosts);
+  return getProfilePostsCache(username);
 }
 
 function removePostFromPostsCaches(id) {

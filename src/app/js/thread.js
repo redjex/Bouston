@@ -266,6 +266,30 @@ async function _refreshServerCommentCount(postId) {
   } catch {}
 }
 
+function handleNewCommentEvent(data) {
+  const postId = Number(data.postId);
+  const comment = data.comment;
+  if (!postId || !comment) return;
+
+  const post = _serverPostsMap.get(postId) || {
+    isOwn: data.postOwner === window._tgUsername,
+    author: { tgUsername: data.postOwner },
+  };
+  comment.isOwn = comment.author?.tgUsername === window._tgUsername;
+  notifyAboutComment(post, comment);
+
+  if (_threadIsServer && Number(_threadPostId) === postId) {
+    const container = document.getElementById('thread-comments');
+    if (container && !container.querySelector(`.comment__like[data-id="${comment.id}"]`)) {
+      container.querySelector('.thread-empty')?.remove();
+      container.appendChild(buildCommentEl(comment, true));
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  _refreshServerCommentCount(postId);
+}
+
 document.addEventListener('click', e => {
   const btn = e.target.closest('.btn-comments[data-thread]');
   if (btn) openThread(Number(btn.dataset.thread));
@@ -304,6 +328,7 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
         if (emptyMsg) emptyMsg.remove();
         container.appendChild(buildCommentEl(newComment, true));
         container.scrollTop = container.scrollHeight;
+        notifyAboutComment(_serverPostsMap.get(_threadPostId), newComment);
         await _refreshServerCommentCount(_threadPostId);
       }
     } catch {}

@@ -285,6 +285,8 @@ function connectEvents() {
       const data = JSON.parse(e.data);
       if (data.type === 'avatar_update')   updateAvatarsInDom(data.username, data.avatarUrl, data.avatarPreviewUrl);
       if (data.type === 'new_post')        prependPostToFeed(data.post);
+      if (data.type === 'new_comment')     handleNewCommentEvent(data);
+      if (data.type === 'post_deleted')    handleDeletedPost(data.postId);
       if (data.type === 'reaction_update') applyReactionUpdate(data.postId, data.reactions);
     } catch {}
   };
