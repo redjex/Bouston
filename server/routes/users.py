@@ -6,6 +6,7 @@ from pathlib import Path
 import aiosqlite
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 
 from auth import (
     check_block, generate_code, get_ip, ip_active_username, ip_blocks,
@@ -14,13 +15,14 @@ from auth import (
 )
 from bot import bot, fetch_and_save_avatar
 from config import (
-    BANNERS_DIR, CODE_PATH, DB_PATH, IMG_DIR, JWT_ALGO, JWT_SECRET, JWT_TTL,
+    ADMIN_IDS, BANNERS_DIR, CODE_PATH, DB_PATH, IMG_DIR, JWT_ALGO, JWT_SECRET, JWT_TTL,
     MAX_AVATAR_BYTES, MAX_BIO_LEN, MAX_NAME_LEN, SEND_COOLDOWN, SERVER_BASE,
     USERNAME_RE,
 )
 from database import (
     avatar_urls, db_create_auth_session, db_get_user, db_list_auth_sessions, ensure_avatar_low,
-    db_revoke_auth_session, db_set_registered, db_upsert_user, save_avatar_image,
+    db_delete_user_posts, db_is_hardban_blocked, db_revoke_auth_session, db_revoke_user_sessions,
+    db_set_registered, db_store_hardban_fingerprints, db_upsert_user, save_avatar_image,
 )
 from models import SendCodeRequest, UpdateCustomizationRequest, UpdateProfileRequest, UserInfoRequest, VerifyCodeRequest
 from sse import broadcast_event
@@ -31,6 +33,87 @@ WALLPAPERS_DIR = IMG_DIR / "wallpapers"
 WALLPAPERS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_AVATAR_URL = "/appimg/default_avatar.png"
 DEFAULT_BANNER_URL = "/appimg/baner.png"
+
+
+class AdminUserActionResponse(BaseModel):
+    ok: bool
+    username: str
+    profile_username: str | None = None
+    verified: bool
+    banned: bool
+    posts_deleted: int = 0
+
+
+async def _require_admin(username: str) -> aiosqlite.Row:
+    user = await db_get_user(username)
+    if not user or int(user["chat_id"] or 0) not in ADMIN_IDS:
+        raise HTTPException(403, "Admin only")
+    return user
+
+
+async def _find_user_by_bouston_username(username: str) -> aiosqlite.Row:
+    target = normalize(username)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """
+            SELECT * FROM users
+            WHERE LOWER(username) = ? OR LOWER(profile_username) = ?
+            LIMIT 1
+            """,
+            (target, target),
+        )
+        user = await cursor.fetchone()
+    if not user:
+        raise HTTPException(404, "User not found")
+    return user
+
+
+def _admin_user_payload(user: aiosqlite.Row) -> AdminUserActionResponse:
+    return AdminUserActionResponse(
+        ok=True,
+        username=user["username"],
+        profile_username=user["profile_username"] if "profile_username" in user.keys() else None,
+        verified=bool(user["verified"]) if "verified" in user.keys() else False,
+        banned=bool(user["banned"]) if "banned" in user.keys() else False,
+    )
+
+
+async def _set_admin_user_flag(target_username: str, field: str, value: bool) -> AdminUserActionResponse:
+    user = await _find_user_by_bouston_username(target_username)
+    now = time.time()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await conn.execute(
+            f"UPDATE users SET {field} = ?, updated_at = ? WHERE username = ?",
+            (1 if value else 0, now, user["username"]),
+        )
+        await conn.commit()
+        cursor = await conn.execute("SELECT * FROM users WHERE username = ?", (user["username"],))
+        fresh = await cursor.fetchone()
+    if field == "banned" and value:
+        await db_revoke_user_sessions(user["username"])
+    return _admin_user_payload(fresh)
+
+
+async def _hardban_user(target_username: str) -> AdminUserActionResponse:
+    user = await _find_user_by_bouston_username(target_username)
+    await db_store_hardban_fingerprints(user["username"])
+    posts_deleted = await db_delete_user_posts(user["username"])
+    await db_revoke_user_sessions(user["username"])
+    now = time.time()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await conn.execute(
+            "UPDATE users SET banned = 1, updated_at = ? WHERE username = ?",
+            (now, user["username"]),
+        )
+        await conn.commit()
+        cursor = await conn.execute("SELECT * FROM users WHERE username = ?", (user["username"],))
+        fresh = await cursor.fetchone()
+    payload = _admin_user_payload(fresh)
+    payload.posts_deleted = posts_deleted
+    return payload
 
 
 def _customization_payload(user, username: str) -> dict:
@@ -71,6 +154,8 @@ async def send_code(body: SendCodeRequest, request: Request):
 
     check_block(ip_blocks, ip)
     check_block(username_blocks, username)
+    if await db_is_hardban_blocked(ip, body.gpu_renderer, body.timezone):
+        raise HTTPException(403, "Device blocked")
 
     active_for_ip    = ip_active_username.get(ip)
     last             = last_send.get(username, 0)
@@ -85,6 +170,9 @@ async def send_code(body: SendCodeRequest, request: Request):
     user = await db_get_user(username)
     if not user:
         raise HTTPException(404, "Сначала напиши боту /start в Telegram")
+
+    if "banned" in user.keys() and bool(user["banned"]):
+        raise HTTPException(403, "Account banned")
 
     from aiogram.types import FSInputFile
     last_send[username]     = time.time()
@@ -121,6 +209,8 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
 
     check_block(ip_blocks, ip)
     check_block(username_blocks, username)
+    if await db_is_hardban_blocked(ip, body.gpu_renderer, body.timezone):
+        raise HTTPException(403, "Device blocked")
 
     entry = pending_codes.get(username)
     if not entry:
@@ -143,18 +233,21 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
     last_send.pop(username, None)
     ip_active_username.pop(ip, None)
 
+    user = await db_get_user(username)
+    if user and "banned" in user.keys() and bool(user["banned"]):
+        raise HTTPException(403, "Account banned")
     session_id = await db_create_auth_session(
         username,
         request.headers.get("User-Agent", ""),
         get_ip(request),
+        body.gpu_renderer,
+        body.timezone,
     )
     token = jwt.encode(
         {"sub": username, "jti": session_id, "exp": int(time.time()) + JWT_TTL},
         JWT_SECRET,
         algorithm=JWT_ALGO,
     )
-
-    user = await db_get_user(username)
     t = int(user["updated_at"] or 0) if user else 0
     avatar_url, avatar_preview_url = avatar_urls(username, user["avatar_path"], t) if user else (None, None)
     avatar_url = avatar_url or DEFAULT_AVATAR_URL
@@ -176,6 +269,42 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
             "banner_url":       banner_url,
         },
     }
+
+
+@router.get("/admin/me")
+async def admin_me(username: str = Depends(require_auth)):
+    user = await db_get_user(username)
+    return {"isAdmin": bool(user and int(user["chat_id"] or 0) in ADMIN_IDS)}
+
+
+@router.put("/admin/users/{target_username}/verify", response_model=AdminUserActionResponse)
+async def admin_verify_user(target_username: str, username: str = Depends(require_auth)):
+    await _require_admin(username)
+    return await _set_admin_user_flag(target_username, "verified", True)
+
+
+@router.put("/admin/users/{target_username}/unverify", response_model=AdminUserActionResponse)
+async def admin_unverify_user(target_username: str, username: str = Depends(require_auth)):
+    await _require_admin(username)
+    return await _set_admin_user_flag(target_username, "verified", False)
+
+
+@router.put("/admin/users/{target_username}/ban", response_model=AdminUserActionResponse)
+async def admin_ban_user(target_username: str, username: str = Depends(require_auth)):
+    await _require_admin(username)
+    return await _set_admin_user_flag(target_username, "banned", True)
+
+
+@router.put("/admin/users/{target_username}/hardban", response_model=AdminUserActionResponse)
+async def admin_hardban_user(target_username: str, username: str = Depends(require_auth)):
+    await _require_admin(username)
+    return await _hardban_user(target_username)
+
+
+@router.put("/admin/users/{target_username}/unban", response_model=AdminUserActionResponse)
+async def admin_unban_user(target_username: str, username: str = Depends(require_auth)):
+    await _require_admin(username)
+    return await _set_admin_user_flag(target_username, "banned", False)
 
 
 @router.get("/auth/sessions")

@@ -91,6 +91,14 @@ let _profileLastRefreshAt = 0;
 const PROFILE_PAGE = 10;
 const PROFILE_REFRESH_COOLDOWN = 30000;
 
+function getFastProfilePostsCache(username) {
+  const profilePosts = getProfilePostsCache(username);
+  if (profilePosts.length) return profilePosts;
+  return getFeedPostsCache()
+    .filter(post => post.author?.tgUsername === username || post.isOwn)
+    .slice(0, PROFILE_PAGE * 3);
+}
+
 function attachProfileMenu(container) {
   container.querySelectorAll('.post__more-wrap:not([data-bound])').forEach(wrap => {
     wrap.dataset.bound = '1';
@@ -127,15 +135,16 @@ async function renderProfilePosts() {
     return;
   }
 
-  const cached = getProfilePostsCache(u);
+  const cached = getFastProfilePostsCache(u);
   if (cached.length) {
+    mergeProfilePostsCache(u, cached);
     _renderProfilePostsList(container, cached);
     _profilePostsRendered = true;
   } else {
     renderPostSkeletons(container, 3);
   }
 
-  await refreshProfilePostsFromServer(container, u, { allowInitialRender: true, hadCache: !!cached.length });
+  refreshProfilePostsFromServer(container, u, { allowInitialRender: true, hadCache: !!cached.length });
 }
 
 async function refreshProfilePostsFromServer(container, username, options = {}) {
@@ -519,7 +528,13 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
   if (!text && !images.length) return;
 
   const btn = document.getElementById('profile-btn-post');
-  setButtonBusy(btn, true, 'Публикация...');
+  const optimisticPost = buildOptimisticPost(text, images, replyToPostId);
+  clearComposeInput('profile-compose-input');
+  clearComposeImages('profile');
+  clearComposeReplyTarget('profile');
+  prependPostToProfile(optimisticPost);
+  if (typeof prependPostToFeed === 'function') prependPostToFeed(optimisticPost);
+  startPostButtonCooldown(btn, 5);
 
   try {
     const res = await apiFetch(`${API}/posts`, {
@@ -531,13 +546,12 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
 
     const post = await res.json();
-    clearComposeInput('profile-compose-input');
-    clearComposeImages('profile');
-    clearComposeReplyTarget('profile');
+    handleDeletedPost(optimisticPost.id);
     prependPostToProfile(post);
     if (typeof prependPostToFeed === 'function') prependPostToFeed(post);
   } catch (err) {
     if (err.message === 'unauthorized') return;
+    handleDeletedPost(optimisticPost.id);
     showPostError(err.message, btn);
   } finally {
     if (!btn.dataset.cooldownTimer) setButtonBusy(btn, false);

@@ -8,7 +8,10 @@ from aiogram.types import FSInputFile
 
 from auth import normalize
 from config import ADMIN_IDS, BANER_PATH, BOT_TOKEN, IMG_DIR
-from database import db_get_user, db_upsert_user, ensure_avatar_low, save_avatar_image
+from database import (
+    db_delete_user_posts, db_get_user, db_revoke_user_sessions,
+    db_store_hardban_fingerprints, db_upsert_user, ensure_avatar_low, save_avatar_image,
+)
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +104,64 @@ async def cmd_verif(message: types.Message):
         await conn.execute("UPDATE users SET verified = 1, updated_at = ? WHERE username = ?", (now, target))
         await conn.commit()
 
-    await message.answer(f"✅ @{target} верифицирован.")
+    await message.answer(f"OK: @{target} verified.")
+
+
+async def _set_ban_status(message: types.Message, banned: bool, hard: bool = False):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("No access.")
+        return
+
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        await message.answer("Usage: /hardban @username" if hard else "Usage: /ban @username")
+        return
+
+    target = normalize(parts[1].lstrip("@"))
+    user = await db_get_user(target)
+    if not user:
+        await message.answer(f"User @{target} not found.")
+        return
+
+    import aiosqlite
+    from config import DB_PATH
+    now = time.time()
+    posts_deleted = 0
+    if hard:
+        await db_store_hardban_fingerprints(target)
+        posts_deleted = await db_delete_user_posts(target)
+
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE users SET banned = ?, updated_at = ? WHERE username = ?",
+            (1 if banned else 0, now, target),
+        )
+        await conn.commit()
+
+    if banned:
+        await db_revoke_user_sessions(target)
+
+    if hard:
+        await message.answer(f"OK: @{target} hardbanned. Posts deleted: {posts_deleted}.")
+    elif banned:
+        await message.answer(f"OK: @{target} banned.")
+    else:
+        await message.answer(f"OK: @{target} unbanned.")
+
+
+@dp.message(Command("ban"))
+async def cmd_ban(message: types.Message):
+    await _set_ban_status(message, True)
+
+
+@dp.message(Command("unban"))
+async def cmd_unban(message: types.Message):
+    await _set_ban_status(message, False)
+
+
+@dp.message(Command("hardban"))
+async def cmd_hardban(message: types.Message):
+    await _set_ban_status(message, True, hard=True)
 
 
 @dp.message(Command("unverif"))

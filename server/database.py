@@ -156,6 +156,7 @@ async def init_db() -> None:
         if 'display_name'     not in cols: await conn.execute("ALTER TABLE users ADD COLUMN display_name     TEXT")
         if 'profile_username' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN profile_username TEXT")
         if 'verified'         not in cols: await conn.execute("ALTER TABLE users ADD COLUMN verified         INTEGER DEFAULT 0")
+        if 'banned'           not in cols: await conn.execute("ALTER TABLE users ADD COLUMN banned           INTEGER DEFAULT 0")
         if 'banner_path'      not in cols: await conn.execute("ALTER TABLE users ADD COLUMN banner_path      TEXT")
         if 'wallpaper_path'   not in cols: await conn.execute("ALTER TABLE users ADD COLUMN wallpaper_path   TEXT")
         if 'gradients_enabled' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN gradients_enabled INTEGER DEFAULT 1")
@@ -214,10 +215,26 @@ async def init_db() -> None:
                 user_agent  TEXT,
                 ip          TEXT,
                 device      TEXT,
+                gpu_renderer TEXT,
+                timezone    TEXT,
                 created_at  REAL NOT NULL,
                 last_seen_at REAL NOT NULL,
                 revoked_at  REAL,
                 FOREIGN KEY (tg_username) REFERENCES users(username) ON DELETE CASCADE
+            )
+        """)
+        cursor = await conn.execute("PRAGMA table_info(auth_sessions)")
+        scols = [r[1] for r in await cursor.fetchall()]
+        if 'gpu_renderer' not in scols: await conn.execute("ALTER TABLE auth_sessions ADD COLUMN gpu_renderer TEXT")
+        if 'timezone' not in scols: await conn.execute("ALTER TABLE auth_sessions ADD COLUMN timezone TEXT")
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS hardban_fingerprints (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                tg_username  TEXT NOT NULL,
+                ip           TEXT,
+                gpu_renderer TEXT,
+                timezone     TEXT,
+                created_at   REAL NOT NULL
             )
         """)
         await conn.commit()
@@ -317,19 +334,34 @@ def describe_user_agent(user_agent: str) -> str:
     return f"{browser} на {os}"
 
 
-async def db_create_auth_session(username: str, user_agent: str, ip: str) -> str:
+async def db_create_auth_session(
+    username: str,
+    user_agent: str,
+    ip: str,
+    gpu_renderer: str | None = None,
+    timezone: str | None = None,
+) -> str:
     session_id = uuid.uuid4().hex
     now = time.time()
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             """
-            INSERT INTO auth_sessions (id, tg_username, user_agent, ip, device, created_at, last_seen_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO auth_sessions (id, tg_username, user_agent, ip, device, gpu_renderer, timezone, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, username, user_agent, ip, describe_user_agent(user_agent), now, now),
+            (session_id, username, user_agent, ip, describe_user_agent(user_agent), gpu_renderer, timezone, now, now),
         )
         await conn.commit()
     return session_id
+
+
+async def db_revoke_user_sessions(username: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE tg_username = ?",
+            (time.time(), username),
+        )
+        await conn.commit()
 
 
 async def db_touch_auth_session(session_id: str, username: str) -> bool:
@@ -377,6 +409,92 @@ async def db_revoke_auth_session(username: str, session_id: str) -> bool:
         )
         await conn.commit()
         return cursor.rowcount > 0
+
+
+def _clean_fingerprint_value(value: str | None, limit: int = 300) -> str | None:
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value[:limit] if value else None
+
+
+async def db_is_hardban_blocked(ip: str, gpu_renderer: str | None, timezone: str | None) -> bool:
+    gpu_renderer = _clean_fingerprint_value(gpu_renderer)
+    timezone = _clean_fingerprint_value(timezone, 80)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """
+            SELECT 1
+            FROM hardban_fingerprints
+            WHERE (ip IS NOT NULL AND ip = ?)
+               OR (
+                    gpu_renderer IS NOT NULL AND gpu_renderer = ?
+                    AND timezone IS NOT NULL AND timezone = ?
+                    AND (ip IS NULL OR ip != ?)
+               )
+            LIMIT 1
+            """,
+            (ip, gpu_renderer, timezone, ip),
+        )
+        return await cursor.fetchone() is not None
+
+
+async def db_store_hardban_fingerprints(username: str) -> None:
+    now = time.time()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """
+            SELECT DISTINCT ip, gpu_renderer, timezone
+            FROM auth_sessions
+            WHERE tg_username = ?
+              AND (ip IS NOT NULL OR gpu_renderer IS NOT NULL OR timezone IS NOT NULL)
+            """,
+            (username,),
+        )
+        rows = await cursor.fetchall()
+        for row in rows:
+            await conn.execute(
+                """
+                INSERT INTO hardban_fingerprints (tg_username, ip, gpu_renderer, timezone, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    username,
+                    _clean_fingerprint_value(row["ip"], 80),
+                    _clean_fingerprint_value(row["gpu_renderer"]),
+                    _clean_fingerprint_value(row["timezone"], 80),
+                    now,
+                ),
+            )
+        await conn.commit()
+
+
+async def db_delete_user_posts(username: str) -> int:
+    deleted = 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute("SELECT id, images FROM posts WHERE tg_username = ?", (username,))
+        rows = await cursor.fetchall()
+        for row in rows:
+            for item in json.loads(row["images"] or "[]"):
+                filename = item if isinstance(item, str) else item.get("file")
+                preview = None if isinstance(item, str) else item.get("preview")
+                try:
+                    if filename:
+                        (POSTS_IMG_DIR / filename).unlink(missing_ok=True)
+                    if preview:
+                        (POSTS_IMG_DIR / preview).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            await conn.execute("DELETE FROM post_reactions WHERE post_id = ?", (row["id"],))
+            await conn.execute("DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)", (row["id"],))
+            await conn.execute("DELETE FROM comments WHERE post_id = ?", (row["id"],))
+            deleted += 1
+        await conn.execute("DELETE FROM posts WHERE tg_username = ?", (username,))
+        await conn.commit()
+    return deleted
 
 
 def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_reactions: list, comment_count: int) -> dict:

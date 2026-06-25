@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Inter:wght@400;500;600;700&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=computer,photo_camera,smartphone" />
-  <link rel="stylesheet" href="css/app.css?v=media-progress-20260626-15" />
+  <link rel="stylesheet" href="css/app.css?v=admin-panel-20260626-1" />
 </head>
 <body>
   <div id="view-feed" class="view view--active">
@@ -22,9 +22,9 @@
         </div>
         <div class="compose__previews" id="feed-compose-previews"></div>
         <div class="compose__footer">
-          <label class="btn-photo" for="feed-photo-input" title="Добавить фото">
+          <button class="btn-photo" type="button" data-file-target="feed-photo-input" title="Добавить фото">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          </label>
+          </button>
           <input type="file" id="feed-photo-input" accept="image/*,video/*" multiple style="display:none" />
           <button class="btn-photo btn-emoji-open" data-target="feed-compose-input" title="Добавить эмодзи">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
@@ -83,9 +83,9 @@
         </div>
         <div class="compose__previews" id="profile-compose-previews"></div>
         <div class="compose__footer">
-          <label class="btn-photo" for="profile-photo-input" title="Добавить фото">
+          <button class="btn-photo" type="button" data-file-target="profile-photo-input" title="Добавить фото">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          </label>
+          </button>
           <input type="file" id="profile-photo-input" accept="image/*,video/*" multiple style="display:none" />
           <button class="btn-photo btn-emoji-open" data-target="profile-compose-input" title="Добавить эмодзи">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
@@ -121,15 +121,15 @@
             </div>
           </div>
           <div class="edit-field">
-            <label>Имя</label>
+            <label for="input-name">Имя</label>
             <input id="input-name" type="text" placeholder="Ваше имя" />
           </div>
           <div class="edit-field">
-            <label>Юзернейм</label>
+            <label for="input-username-profile">Юзернейм</label>
             <input id="input-username-profile" type="text" placeholder="@username" maxlength="21" />
           </div>
           <div class="edit-field">
-            <label>Описание</label>
+            <label for="input-bio">Описание</label>
             <input id="input-bio" type="text" placeholder="Расскажи о себе" />
           </div>
         </div>
@@ -164,6 +164,23 @@
           <span class="account-add__icon">+</span>
           <span>Добавить аккаунт</span>
         </button>
+      </section>
+
+      <section class="settings-section admin-panel" id="settings-admin-panel" hidden>
+        <div class="settings-section__head">
+          <span class="settings-section__title">Admin</span>
+          <span class="settings-section__limit" id="settings-admin-status"></span>
+        </div>
+        <div class="admin-panel__row">
+          <input class="admin-panel__input" id="settings-admin-username" type="text" placeholder="@username" />
+        </div>
+        <div class="admin-panel__actions">
+          <button class="settings-save" id="settings-admin-verify" type="button">Выдать галочку</button>
+          <button class="settings-save" id="settings-admin-unverify" type="button">Убрать галочку</button>
+          <button class="settings-save settings-save--danger" id="settings-admin-ban" type="button">Забанить</button>
+          <button class="settings-save settings-save--danger" id="settings-admin-hardban" type="button">Hardban</button>
+          <button class="settings-save" id="settings-admin-unban" type="button">Разбанить</button>
+        </div>
       </section>
 
       <section class="settings-section settings-section--privacy">
@@ -230,7 +247,7 @@
           <div class="wallpaper-control">
             <div class="wallpaper-preview" id="settings-wallpaper-preview"></div>
             <div class="wallpaper-control__actions">
-              <label class="wallpaper-btn" id="settings-wallpaper-action" for="settings-wallpaper-input">Добавить обои</label>
+              <button class="wallpaper-btn" id="settings-wallpaper-action" type="button">Добавить обои</button>
             </div>
             <input id="settings-wallpaper-input" type="file" accept="image/*" hidden />
           </div>
@@ -406,16 +423,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js"></script>
-  <script src="js/api.js"></script>
+  <script src="js/api.js?v=rate-limit-retry-20260626-1"></script>
   <script src="js/tgs.js?v=reactions-batch-20260621-4"></script>
   <script src="js/storage.js?v=banner-cache-posts-20260625-6"></script>
-  <script src="js/notifications.js?v=mentions-20260625-2"></script>
-  <script src="js/posts.js?v=media-progress-20260626-14"></script>
-  <script src="js/feed.js?v=rate-limit-cache-20260626-9"></script>
-  <script src="js/profile.js?v=profile-refresh-cooldown-20260626-13"></script>
-  <script src="js/thread.js?v=route-comments-20260626-11"></script>
+  <script src="js/notifications.js?v=audio-unlock-20260626-1"></script>
+  <script src="js/posts.js?v=send-cooldown-20260626-1"></script>
+  <script src="js/feed.js?v=rate-limit-sentinel-20260626-1"></script>
+  <script src="js/profile.js?v=send-cooldown-20260626-1"></script>
+  <script src="js/thread.js?v=comment-retry-20260626-1"></script>
   <script src="js/user-profile.js?v=route-pages-20260626-12"></script>
-  <script src="js/settings.js?v=mobile-20260621-3"></script>
-  <script src="js/app.js?v=client-routes-20260626-12"></script>
+  <script src="js/settings.js?v=admin-panel-20260626-1"></script>
+  <script src="js/app.js?v=file-buttons-20260626-1"></script>
 </body>
 </html>

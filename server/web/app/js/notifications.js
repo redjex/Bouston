@@ -5,6 +5,7 @@ const BOUSTON_NOTIFICATION_GAIN = 1.8;
 const _boustonNotificationSeen = new Set();
 let _boustonNotificationAudioCtx = null;
 let _boustonNotificationBufferPromise = null;
+let _boustonNotificationAudioUnlocked = false;
 
 function normalizeNotificationUsername(value) {
   return String(value || '').trim().replace(/^@+/, '').toLowerCase();
@@ -39,6 +40,7 @@ function markNotificationSeen(key) {
 function getNotificationAudioContext() {
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextCtor) return null;
+  if (!_boustonNotificationAudioUnlocked) return null;
   if (!_boustonNotificationAudioCtx) _boustonNotificationAudioCtx = new AudioContextCtor();
   return _boustonNotificationAudioCtx;
 }
@@ -56,6 +58,7 @@ function getNotificationBuffer(ctx) {
 
 function unlockBoustonNotificationAudio() {
   try {
+    _boustonNotificationAudioUnlocked = true;
     const ctx = getNotificationAudioContext();
     if (!ctx) return;
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});

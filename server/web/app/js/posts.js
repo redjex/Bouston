@@ -525,6 +525,43 @@ function clearComposeImages(ns) {
   if (el) el.innerHTML = '';
 }
 
+function buildOptimisticPost(text, images = [], replyToPostId = null) {
+  const profile = getProfile();
+  const id = Date.now();
+  const replyTo = replyToPostId ? getPostById(Number(replyToPostId)) : null;
+  return {
+    id,
+    text,
+    createdAt: id,
+    images: images.map(m => ({ ...m })),
+    reactions: {},
+    myReactions: [],
+    likes: 0,
+    liked: false,
+    commentCount: 0,
+    isOwn: true,
+    pending: true,
+    replyTo: replyTo ? {
+      id: replyTo.id,
+      text: replyTo.text,
+      hasMedia: !!(replyTo.images && replyTo.images.length),
+      author: replyTo.author || {
+        displayName: profile.name,
+        profileUsername: profile.username,
+        tgUsername: window._tgUsername,
+      },
+    } : null,
+    author: {
+      displayName: profile.name,
+      profileUsername: profile.username,
+      tgUsername: window._tgUsername,
+      avatarUrl: profile.avatar,
+      avatarPreviewUrl: getProfileAvatarPreview(profile) || profile.avatar,
+      isVerified: profile.verified === true,
+    },
+  };
+}
+
 function getComposeReplyTargetId(ns) {
   return _composeReplyTargets[ns]?.id || null;
 }
@@ -827,6 +864,27 @@ function restorePostButton(btnEl, text = null) {
   delete btnEl.dataset.cooldownTimer;
 }
 
+function startPostButtonCooldown(btnEl, seconds = 5, text = null) {
+  if (!btnEl) return;
+  if (btnEl.dataset.cooldownTimer) clearInterval(Number(btnEl.dataset.cooldownTimer));
+  const restoreText = text || btnEl.dataset.idleText || btnEl.dataset.origText || btnEl.textContent || '\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u044c';
+  let secs = seconds;
+  btnEl.dataset.origText = restoreText;
+  btnEl.classList.remove('btn-post--loading');
+  btnEl.disabled = true;
+  btnEl.textContent = `${secs}\u0441`;
+  const cooldownTimer = setInterval(() => {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(cooldownTimer);
+      restorePostButton(btnEl, restoreText);
+    } else {
+      btnEl.textContent = `${secs}\u0441`;
+    }
+  }, 1000);
+  btnEl.dataset.cooldownTimer = String(cooldownTimer);
+}
+
 function showPostError(message, btnEl) {
   let toast = document.getElementById('post-error-toast');
   if (!toast) {
@@ -1027,6 +1085,27 @@ function buildPostTextEl(text) {
 const _serverPostsMap = new Map();
 const _editingPostIds = new Set();
 
+function refreshPostLayoutFlags(postEl) {
+  if (!postEl) return;
+  const isVerified = postEl.classList.contains('post--verified');
+  const textEl = postEl.querySelector('.post__text');
+  const footerEl = postEl.querySelector('.post__footer');
+  let textTall = false;
+  if (textEl) {
+    const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
+    textTall = textEl.offsetHeight > lh * 1.8;
+  }
+  const verifiedTall = isVerified && (
+    textTall ||
+    !!postEl.querySelector('.post__pinned') ||
+    !!postEl.querySelector('.post__images') ||
+    !!postEl.querySelector('.post-reply') ||
+    (footerEl && footerEl.offsetHeight > 44)
+  );
+  postEl.classList.toggle('post--text-tall', textTall);
+  postEl.classList.toggle('post--verified-tall', verifiedTall);
+}
+
 function registerServerPost(post) {
   if (!post.reactions)   post.reactions   = {};
   if (!post.myReactions) post.myReactions = [];
@@ -1152,6 +1231,7 @@ function startEditPost(id, postEl, onDone) {
     }
     postEl.classList.remove('post--editing');
     _editingPostIds.delete(id);
+    requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
   };
   const failSave = message => {
     saveBtn.disabled = false;
@@ -1273,18 +1353,39 @@ function handleDeletedPost(id) {
 
 function pinPost(id, onDone) {
   if (_serverPostsMap.has(id)) {
+    const current = _serverPostsMap.get(id);
+    const previous = { ...current };
+    const nextPost = {
+      ...current,
+      pinned: !current.pinned,
+      pinnedAt: current.pinned ? null : Date.now(),
+    };
+    _serverPostsMap.set(id, nextPost);
+    mergeFeedPostsCache([nextPost]);
+    if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+    onDone();
+
     apiFetch(`${API}/posts/${id}/pin`, { method: 'PUT' })
       .then(r => r.ok ? r.json() : null)
       .then(updated => {
         if (updated) {
-          const nextPost = { ..._serverPostsMap.get(id), ...updated };
-          _serverPostsMap.set(id, nextPost);
-          mergeFeedPostsCache([nextPost]);
-          if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+          const serverPost = { ..._serverPostsMap.get(id), ...updated };
+          _serverPostsMap.set(id, serverPost);
+          mergeFeedPostsCache([serverPost]);
+          if (serverPost.author?.tgUsername) mergeProfilePostsCache(serverPost.author.tgUsername, [serverPost]);
+        } else {
+          _serverPostsMap.set(id, previous);
+          mergeFeedPostsCache([previous]);
+          if (previous.author?.tgUsername) mergeProfilePostsCache(previous.author.tgUsername, [previous]);
+          onDone();
         }
-        onDone();
       })
-      .catch(() => onDone());
+      .catch(() => {
+        _serverPostsMap.set(id, previous);
+        mergeFeedPostsCache([previous]);
+        if (previous.author?.tgUsername) mergeProfilePostsCache(previous.author.tgUsername, [previous]);
+        onDone();
+      });
     return;
   }
   const posts = getPosts();
@@ -1337,38 +1438,21 @@ async function getEmojiFileMap() {
   return _emojiFileMap;
 }
 
-const REACTION_ANIMATION_BATCH_SIZE = 5;
-const _batchedTgsAnimationStates = new WeakMap();
+let _reactionToPlayOnce = null;
 
 function registerBatchedTgsPlayer(wrapper, player, index = null) {
-  let state = _batchedTgsAnimationStates.get(wrapper);
-  if (!state) {
-    state = { players: [], timer: null, running: false };
-    _batchedTgsAnimationStates.set(wrapper, state);
-  }
-
   player.showFirstFrame?.();
-  if (index === null) state.players.push(player);
-  else state.players[index] = player;
-  clearTimeout(state.timer);
-  state.timer = setTimeout(() => {
-    const run = () => runBatchedTgsAnimations(wrapper);
-    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 900 });
-    else setTimeout(run, 120);
-  }, 80);
 }
 
-async function runBatchedTgsAnimations(wrapper) {
-  const state = _batchedTgsAnimationStates.get(wrapper);
-  if (!state || state.running || !wrapper.isConnected) return;
+function shouldPlayReactionOnce(id, emoji) {
+  if (!_reactionToPlayOnce) return false;
+  return Number(_reactionToPlayOnce.id) === Number(id) && _reactionToPlayOnce.emoji === emoji;
+}
 
-  state.running = true;
-  const players = state.players.filter(Boolean);
-  for (let i = 0; i < players.length && wrapper.isConnected; i += REACTION_ANIMATION_BATCH_SIZE) {
-    const batch = players.slice(i, i + REACTION_ANIMATION_BATCH_SIZE);
-    await Promise.all(batch.map(player => player.playOnce?.() || Promise.resolve()));
-  }
-  state.running = false;
+function consumeReactionToPlayOnce(id, emoji) {
+  if (!shouldPlayReactionOnce(id, emoji)) return false;
+  _reactionToPlayOnce = null;
+  return true;
 }
 
 function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
@@ -1387,10 +1471,12 @@ function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
       player.dataset.tgs = '1';
       iconWrap.appendChild(player);
       if (wrapper) registerBatchedTgsPlayer(wrapper, player, index);
+      if (consumeReactionToPlayOnce(id, emoji)) player.playOnce?.();
     } else {
+      consumeReactionToPlayOnce(id, emoji);
       iconWrap.textContent = emoji;
     }
-  });
+  }).catch(() => { consumeReactionToPlayOnce(id, emoji); });
 
   const counter = document.createElement('span');
   counter.textContent = count;
@@ -1460,6 +1546,7 @@ function reactionLimit() {
 }
 
 async function toggleReaction(id, emoji) {
+  _reactionToPlayOnce = { id, emoji };
   const isServer = _serverPostsMap.has(id);
 
   if (isServer) {
@@ -1778,14 +1865,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   mountVideoPlayers(el);
 
   const markTallPost = () => {
-    const textEl = el.querySelector('.post__text');
-    const footerEl = el.querySelector('.post__footer');
-    if (textEl) {
-      const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
-      if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
-      if (isVerified && textEl.offsetHeight > lh * 1.8) el.classList.add('post--verified-tall');
-    }
-    if (isVerified && footerEl && footerEl.offsetHeight > 44) el.classList.add('post--verified-tall');
+    refreshPostLayoutFlags(el);
   };
   if ('requestIdleCallback' in window) requestIdleCallback(markTallPost, { timeout: 900 });
   else requestAnimationFrame(markTallPost);

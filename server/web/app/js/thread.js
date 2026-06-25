@@ -115,14 +115,14 @@ function renderThread() {
 
 async function renderComments() {
   const container = document.getElementById('thread-comments');
-  container.innerHTML = '<p class="thread-empty">Загрузка...</p>';
+  container.innerHTML = '<p class="thread-empty">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...</p>';
 
   if (_threadIsServer) {
     const cached = getCachedThreadComments(_threadPostId);
     if (cached) {
       container.innerHTML = '';
       if (!cached.length) {
-        container.innerHTML = '<p class="thread-empty">РљРѕРјРјРµРЅС‚Р°СЂРёРµРІ РїРѕРєР° РЅРµС‚</p>';
+        container.innerHTML = '<p class="thread-empty">\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442</p>';
         return;
       }
       cached.forEach(c => container.appendChild(buildCommentEl(c, true)));
@@ -143,7 +143,7 @@ async function renderComments() {
     if (loaded) saveCachedThreadComments(_threadPostId, comments);
     container.innerHTML = '';
     if (!comments.length) {
-      container.innerHTML = '<p class="thread-empty">Комментариев пока нет</p>';
+      container.innerHTML = '<p class="thread-empty">\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442</p>';
       return;
     }
     comments.forEach(c => container.appendChild(buildCommentEl(c, true)));
@@ -157,7 +157,7 @@ async function renderComments() {
 
   container.innerHTML = '';
   if (!comments.length) {
-    container.innerHTML = '<p class="thread-empty">Комментариев пока нет</p>';
+    container.innerHTML = '<p class="thread-empty">\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442</p>';
     return;
   }
 
@@ -309,6 +309,11 @@ function appendThreadComment(comment, isServer) {
   return true;
 }
 
+function removeThreadCommentEl(commentId) {
+  const btn = document.querySelector(`.comment__like[data-id="${commentId}"]`);
+  btn?.closest('.comment-row')?.remove();
+}
+
 function _applyLikeToBtn(btn, liked, count) {
   const icon    = btn.querySelector('img');
   let   countEl = btn.querySelector('span');
@@ -401,56 +406,128 @@ function syncThreadComposeInput() {
 }
 
 let _threadPosting = false;
+let _threadCooldownTimer = null;
+const _pendingThreadCommentRetries = new Map();
+
+function startThreadSendCooldown(btn, seconds = 5) {
+  if (!btn) return;
+  if (_threadCooldownTimer) clearInterval(_threadCooldownTimer);
+  if (!btn.dataset.idleHtml) btn.dataset.idleHtml = btn.innerHTML;
+  let secs = seconds;
+  btn.disabled = true;
+  btn.classList.add('thread-compose__btn--cooldown');
+  btn.textContent = String(secs);
+  _threadCooldownTimer = setInterval(() => {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(_threadCooldownTimer);
+      _threadCooldownTimer = null;
+      btn.classList.remove('thread-compose__btn--cooldown');
+      btn.innerHTML = btn.dataset.idleHtml || '<img src="/appimg/up.svg" alt="" />';
+      delete btn.dataset.idleHtml;
+      btn.disabled = false;
+      return;
+    }
+    btn.textContent = String(secs);
+  }, 1000);
+}
+
+function getThreadRetryDelay() {
+  const ms = typeof getApiRateLimitRemainingMs === 'function' ? getApiRateLimitRemainingMs() : 0;
+  return Math.max(5000, ms || 5000);
+}
+
+function scheduleThreadCommentRetry(postId, tempComment, text) {
+  const key = String(tempComment.id);
+  if (_pendingThreadCommentRetries.has(key)) clearTimeout(_pendingThreadCommentRetries.get(key));
+  const delay = getThreadRetryDelay();
+  const timer = setTimeout(() => {
+    _pendingThreadCommentRetries.delete(key);
+    sendPendingThreadComment(postId, tempComment, text);
+  }, delay);
+  _pendingThreadCommentRetries.set(key, timer);
+}
+
+async function sendPendingThreadComment(postId, tempComment, text) {
+  try {
+    const res = await apiFetch(`${API}/posts/${postId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (res.status === 429) {
+      scheduleThreadCommentRetry(postId, tempComment, text);
+      return;
+    }
+    if (!res.ok) throw new Error('comment failed');
+    const newComment = await res.json();
+    removeThreadCommentEl(tempComment.id);
+    removeCachedThreadComment(postId, tempComment.id);
+    appendThreadComment(newComment, true);
+    notifyAboutComment(_serverPostsMap.get(postId), newComment);
+    updateServerCommentCountFromCache(postId);
+  } catch (err) {
+    if (err.status === 429 || err.message === 'rate_limited') {
+      scheduleThreadCommentRetry(postId, tempComment, text);
+      return;
+    }
+    removeThreadCommentEl(tempComment.id);
+    removeCachedThreadComment(postId, tempComment.id);
+    updateServerCommentCountFromCache(postId);
+  }
+}
 
 async function submitThreadComment() {
+  if (_threadCooldownTimer) return;
   if (_threadPosting) return;
   const input = document.getElementById('thread-compose-input');
   const text  = input.value.trim();
   if (!text || _threadPostId === null) return;
+  if (_threadIsServer && !window._tgUsername) return;
 
   const btn = document.getElementById('thread-btn-post');
   _threadPosting = true;
-  btn.disabled = true;
+  startThreadSendCooldown(btn, 5);
 
   const container = document.getElementById('thread-comments');
+  const profile = getProfile();
+  const tempComment = {
+    id: Date.now(),
+    text,
+    createdAt: Date.now(),
+    likesCount: 0,
+    myLike: false,
+    isOwn: true,
+    pending: true,
+    author: {
+      displayName: profile.name,
+      avatarUrl: profile.avatar || '/appimg/default_avatar.png',
+      avatarPreviewUrl: getProfileAvatarPreview(profile) || '/appimg/default_avatar.png',
+      isVerified: profile.verified === true,
+    },
+  };
+  input.value = '';
+  syncThreadComposeInput();
+  appendThreadComment(tempComment, _threadIsServer);
+  if (_threadIsServer) updateServerCommentCountFromCache(_threadPostId);
+  else refreshCommentCount(_threadPostId);
 
   try {
     if (_threadIsServer) {
-      if (!window._tgUsername) return;
-      const res = await apiFetch(`${API}/posts/${_threadPostId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      if (res.ok) {
-        const newComment = await res.json();
-        input.value = '';
-        syncThreadComposeInput();
-        appendThreadComment(newComment, true);
-        notifyAboutComment(_serverPostsMap.get(_threadPostId), newComment);
-        updateServerCommentCountFromCache(_threadPostId);
-      }
+      await sendPendingThreadComment(_threadPostId, tempComment, text);
     } else {
-      const id  = Date.now();
       saveComment(_threadPostId, text);
-      input.value = '';
-      syncThreadComposeInput();
-      const profile = getProfile();
-      const mapped  = {
-        id, text, createdAt: id, likesCount: 0, myLike: false, isOwn: true,
-        author: {
-          displayName: profile.name,
-          avatarUrl:   profile.avatar || '/appimg/default_avatar.png',
-          avatarPreviewUrl: getProfileAvatarPreview(profile) || '/appimg/default_avatar.png',
-          isVerified:  profile.verified === true,
-        },
-      };
-      appendThreadComment(mapped, false);
       refreshCommentCount(_threadPostId);
     }
   } catch {
+    removeThreadCommentEl(tempComment.id);
+    if (_threadIsServer) {
+      removeCachedThreadComment(_threadPostId, tempComment.id);
+      updateServerCommentCountFromCache(_threadPostId);
+    } else {
+      refreshCommentCount(_threadPostId);
+    }
   } finally {
-    btn.disabled = false;
     _threadPosting = false;
   }
 }

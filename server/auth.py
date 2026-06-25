@@ -105,6 +105,10 @@ async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bear
         session_id: str = payload.get("jti", "")
         if not username:
             raise HTTPException(401, "Invalid token")
+        from database import db_get_user
+        user = await db_get_user(username)
+        if user and "banned" in user.keys() and bool(user["banned"]):
+            raise HTTPException(403, "Account banned")
         if session_id and not await db_touch_auth_session(session_id, username):
             raise HTTPException(401, "Session ended. Sign in again")
         return username

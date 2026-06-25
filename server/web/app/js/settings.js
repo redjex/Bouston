@@ -274,6 +274,46 @@ function escSettings(value) {
     : String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+let _adminChecked = false;
+let _isAdmin = false;
+
+async function renderAdminPanel() {
+  const panel = document.getElementById('settings-admin-panel');
+  if (!panel) return;
+  if (!_adminChecked) {
+    _adminChecked = true;
+    try {
+      const res = await apiFetch(`${API}/admin/me`);
+      const data = res.ok ? await res.json() : {};
+      _isAdmin = data.isAdmin === true;
+    } catch {
+      _isAdmin = false;
+    }
+  }
+  panel.hidden = !_isAdmin;
+}
+
+async function runAdminUserAction(action) {
+  const input = document.getElementById('settings-admin-username');
+  const status = document.getElementById('settings-admin-status');
+  const username = String(input?.value || '').trim().replace(/^@+/, '').toLowerCase();
+  if (!username) {
+    if (status) status.textContent = 'Введите username';
+    return;
+  }
+  if (status) status.textContent = '...';
+  try {
+    const res = await apiFetch(`${API}/admin/users/${encodeURIComponent(username)}/${action}`, { method: 'PUT' });
+    if (!res.ok) throw new Error('admin action failed');
+    const data = await res.json();
+    if (status) {
+      status.textContent = `@${data.profile_username || data.username}: ${data.verified ? 'verified' : 'no verified'}${data.banned ? ', banned' : ''}`;
+    }
+  } catch {
+    if (status) status.textContent = 'Ошибка';
+  }
+}
+
 function renderSettings() {
   const profile = getProfile();
   const current = getCurrentAccountSnapshot();
@@ -293,6 +333,7 @@ function renderSettings() {
   if (username) username.textContent = '@' + (profile.username || profile.tgUsername || current?.user?.username || '');
   if (verified) verified.hidden = !profile.verified;
   if (limitEl) limitEl.textContent = `${accounts.length}/${limit}`;
+  renderAdminPanel();
 
   if (list) {
     list.innerHTML = '';
@@ -455,7 +496,10 @@ document.getElementById('settings-wallpaper-input')?.addEventListener('change', 
   event.target.value = '';
 });
 document.getElementById('settings-wallpaper-action')?.addEventListener('click', event => {
-  if (!getCustomizationDraft().wallpaper) return;
+  if (!getCustomizationDraft().wallpaper) {
+    document.getElementById('settings-wallpaper-input')?.click();
+    return;
+  }
   event.preventDefault();
   _wallpaperSaveExtra = { clear_wallpaper: true };
   updateCustomizationDraft({ wallpaper: '' });
@@ -487,6 +531,12 @@ document.getElementById('settings-wallpaper-save')?.addEventListener('click', as
     setTimeout(() => { btn.textContent = 'Сохранить обои'; btn.disabled = false; }, 1200);
   }
 });
+
+document.getElementById('settings-admin-verify')?.addEventListener('click', () => runAdminUserAction('verify'));
+document.getElementById('settings-admin-unverify')?.addEventListener('click', () => runAdminUserAction('unverify'));
+document.getElementById('settings-admin-ban')?.addEventListener('click', () => runAdminUserAction('ban'));
+document.getElementById('settings-admin-hardban')?.addEventListener('click', () => runAdminUserAction('hardban'));
+document.getElementById('settings-admin-unban')?.addEventListener('click', () => runAdminUserAction('unban'));
 document.getElementById('account-auth-cancel')?.addEventListener('click', () => {
   document.getElementById('account-auth-overlay')?.setAttribute('hidden', '');
 });

@@ -3,11 +3,15 @@ from pydantic import BaseModel
 
 class SendCodeRequest(BaseModel):
     username: str
+    gpu_renderer: str | None = None
+    timezone: str | None = None
 
 
 class VerifyCodeRequest(BaseModel):
     username: str
     code: str
+    gpu_renderer: str | None = None
+    timezone: str | None = None
 
 
 class UserInfoRequest(BaseModel):

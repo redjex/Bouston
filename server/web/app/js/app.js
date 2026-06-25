@@ -54,6 +54,13 @@ function showView(name, options = {}) {
 document.getElementById('nav-home').addEventListener('click', () => showView('feed'));
 document.getElementById('nav-profile').addEventListener('click', () => showView('profile'));
 
+document.querySelectorAll('[data-file-target]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.fileTarget);
+    if (input) input.click();
+  });
+});
+
 /* ── Scroll to top ───────────────────────────── */
 const _scrollTopBtn = document.getElementById('btn-scroll-top');
 const _profileSettingsBtn = document.getElementById('btn-profile-settings');
@@ -76,7 +83,7 @@ function normalizeStaticLabels() {
   const profilePostBtn = document.getElementById('profile-btn-post');
   if (feedPostBtn) feedPostBtn.textContent = 'Выставить';
   if (profilePostBtn) profilePostBtn.textContent = 'Выставить';
-  document.querySelectorAll('label[for$="-photo-input"]').forEach(el => { el.title = 'Добавить фото'; });
+  document.querySelectorAll('[data-file-target$="-photo-input"]').forEach(el => { el.title = 'Добавить фото'; });
   document.querySelectorAll('.btn-emoji-open').forEach(el => { el.title = 'Добавить эмодзи'; });
   const settingsBtn = document.getElementById('btn-profile-settings');
   if (settingsBtn) settingsBtn.title = 'Настройки';
