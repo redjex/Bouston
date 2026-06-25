@@ -629,6 +629,27 @@ function isHeartOnly(text) {
   return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
 }
 
+let _notificationAudio = null;
+
+function playNotificationSound() {
+  if (!_notificationAudio) {
+    _notificationAudio = new Audio('/web/app/audio/notification.mp3');
+    _notificationAudio.volume = 0.5;
+  }
+  _notificationAudio.currentTime = 0;
+  _notificationAudio.play().catch(() => {});
+}
+
+function checkMention(text, authorUsername) {
+  const currentUser = window._tgUsername;
+  if (!currentUser || !text) return;
+  if (authorUsername === currentUser) return;
+  const mentionRegex = new RegExp(`@${currentUser.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$|[.,!?;:]|\\n)`, 'i');
+  if (mentionRegex.test(text)) {
+    playNotificationSound();
+  }
+}
+
 let _emojiRegex = null;
 let _emojiMap   = null;
 
@@ -655,7 +676,14 @@ function buildPostTextEl(text) {
     return p;
   }
 
-  p.textContent = text;
+  // Разбиваем текст по переносам строк и добавляем <br>
+  const lines = text.split('\n');
+  lines.forEach((line, index) => {
+    p.appendChild(document.createTextNode(line));
+    if (index < lines.length - 1) {
+      p.appendChild(document.createElement('br'));
+    }
+  });
 
   getEmojiRegex().then(result => {
     if (!result) return;
@@ -702,6 +730,11 @@ function registerServerPost(post) {
   if (!post.reactions)   post.reactions   = {};
   if (!post.myReactions) post.myReactions = [];
   _serverPostsMap.set(post.id, post);
+
+  // Проверяем упоминание при регистрации поста
+  if (post.text && post.author?.tgUsername) {
+    checkMention(post.text, post.author.tgUsername);
+  }
 }
 
 function getPostById(id) {

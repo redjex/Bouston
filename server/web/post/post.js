@@ -204,7 +204,14 @@ function buildTextNode(text, emojiMap) {
 
   parts.forEach(part => {
     if (part.type === 'text') {
-      p.appendChild(document.createTextNode(part.value));
+      // Разбиваем текст по переносам строк и добавляем <br>
+      const lines = part.value.split('\n');
+      lines.forEach((line, index) => {
+        p.appendChild(document.createTextNode(line));
+        if (index < lines.length - 1) {
+          p.appendChild(document.createElement('br'));
+        }
+      });
     } else {
       const url = emojiMap[part.value];
       if (url) {

@@ -1337,6 +1337,7 @@ body.no-verified-gradients .post__verified-bg {
 	 line-height: 1.55;
 	 word-break: break-word;
 	 overflow-wrap: break-word;
+	 white-space: pre-wrap;
 }
 /* Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ post images Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ */
  .post__images {

@@ -651,7 +651,7 @@ function showPostError(message, btnEl) {
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    .replace(/>/g, '&gt;');
 }
 function getHandle(profile) {
   const u = profile.username || profile.name || '';
@@ -716,7 +716,14 @@ function buildPostTextEl(text) {
     return p;
   }
 
-  p.textContent = text;
+  // Разбиваем текст по переносам строк и создаём текстовые узлы
+  const lines = text.split('\n');
+  lines.forEach((line, index) => {
+    p.appendChild(document.createTextNode(line));
+    if (index < lines.length - 1) {
+      p.appendChild(document.createElement('br'));
+    }
+  });
 
   getEmojiRegex().then(result => {
     if (!result) return;
