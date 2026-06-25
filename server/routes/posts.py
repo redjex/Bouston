@@ -113,6 +113,13 @@ async def create_post(body: CreatePostRequest, username: str = Depends(require_a
     if not user:
         raise HTTPException(404, "Пользователь не найден")
 
+    reply_to_id = body.replyToPostId
+    if reply_to_id is not None:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            cursor = await conn.execute("SELECT id FROM posts WHERE id = ?", (reply_to_id,))
+            if not await cursor.fetchone():
+                raise HTTPException(404, "Пост для ответа не найден")
+
     saved = []
     for raw in body.images:
         try:
@@ -141,8 +148,8 @@ async def create_post(body: CreatePostRequest, username: str = Depends(require_a
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cursor = await conn.execute(
-            "INSERT INTO posts (tg_username, text, images, created_at) VALUES (?, ?, ?, ?)",
-            (username, body.text, json.dumps(saved), now),
+            "INSERT INTO posts (tg_username, text, images, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?)",
+            (username, body.text, json.dumps(saved), reply_to_id, now),
         )
         post_id = cursor.lastrowid
         await conn.commit()

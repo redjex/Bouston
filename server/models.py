@@ -32,8 +32,9 @@ class UpdateCustomizationRequest(BaseModel):
 
 
 class CreatePostRequest(BaseModel):
-    text:   str       = ""
-    images: list[str] = []
+    text:          str       = ""
+    images:        list[str] = []
+    replyToPostId: int | None = None
 
 
 class EditPostRequest(BaseModel):

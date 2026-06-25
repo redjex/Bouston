@@ -1,6 +1,6 @@
-'use strict';
+﻿'use strict';
 
-/* ── Lightbox ───────────────────────────────── */
+/* в”Ђв”Ђ Lightbox в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 (function () {
   const lb             = document.getElementById('lightbox');
   const lbImg          = document.getElementById('lightbox-img');
@@ -108,8 +108,8 @@
 
   let scale = 1, tx = 0, ty = 0, rotation = 0, flipH = 1, flipV = 1;
   let _isVideo = false;
-  let _lbItems = [];   // [{src, isVideo}] — все медиа текущего поста
-  let _lbIndex = 0;   // текущий индекс
+  let _lbItems = [];   // [{src, isVideo}] вЂ” РІСЃРµ РјРµРґРёР° С‚РµРєСѓС‰РµРіРѕ РїРѕСЃС‚Р°
+  let _lbIndex = 0;   // С‚РµРєСѓС‰РёР№ РёРЅРґРµРєСЃ
 
   function activeEl() { return _isVideo ? lbVideo : lbImg; }
 
@@ -270,7 +270,7 @@
   });
 })();
 
-/* ── Emoji insert panel ─────────────────────── */
+/* в”Ђв”Ђ Emoji insert panel в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 (function () {
   const panel   = document.getElementById('emoji-panel');
   const grid    = document.getElementById('emoji-panel-grid');
@@ -336,7 +336,7 @@
     const player = createTgsPlayer(file, 26, true, true);
     wrap.appendChild(player);
 
-    const after = document.createTextNode('​');
+    const after = document.createTextNode('вЂ‹');
 
     const sel = window.getSelection();
     let inserted = false;
@@ -395,7 +395,7 @@
   });
 })();
 
-/* ── Custom video player ────────────────────── */
+/* в”Ђв”Ђ Custom video player в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function fmtTime(s) {
   if (!isFinite(s)) return '0:00';
   const m = Math.floor(s / 60), ss = Math.floor(s % 60);
@@ -427,13 +427,13 @@ function mountVideoPlayers(container) {
   });
 }
 
-/* ── Compose contenteditable helpers ───────── */
+/* в”Ђв”Ђ Compose contenteditable helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function getComposeText(id) {
   const el = document.getElementById(id);
   if (!el) return '';
   let text = '';
   el.childNodes.forEach(node => {
-    if (node.nodeType === Node.TEXT_NODE) text += node.textContent.replace(/​/g, '');
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent.replace(/вЂ‹/g, '');
     else if (node.dataset?.emoji) text += node.dataset.emoji;
     else if (node.nodeName === 'BR') text += '\n';
     else text += node.textContent;
@@ -451,12 +451,12 @@ function watchComposeEmpty(id) {
   if (!el) return;
   el.addEventListener('input', () => {
     const isEmpty = el.innerHTML === '' || el.innerHTML === '<br>' ||
-      el.textContent.replace(/​/g, '').trim() === '' && !el.querySelector('span[data-emoji]');
+      el.textContent.replace(/вЂ‹/g, '').trim() === '' && !el.querySelector('span[data-emoji]');
     if (isEmpty) el.innerHTML = '';
   });
 }
 
-/* ── Compose photo ──────────────────────────── */
+/* в”Ђв”Ђ Compose photo в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 const _composeImages = { feed: [], profile: [] };
 
 function getComposeImages(ns) { return _composeImages[ns] || []; }
@@ -496,7 +496,7 @@ function initComposePhoto(ns) {
 
       const rm = document.createElement('button');
       rm.className = 'compose__preview-remove';
-      rm.textContent = '×';
+      rm.textContent = 'Г—';
       rm.addEventListener('click', () => {
         const idx = _composeImages[ns].findIndex(m => m.src === dataUrl);
         if (idx !== -1) _composeImages[ns].splice(idx, 1);
@@ -524,7 +524,7 @@ function initComposePhoto(ns) {
     mediaItems.forEach(i => addFile(i.getAsFile()));
   });
 
-  // Drag-and-drop на поле ввода
+  // Drag-and-drop РЅР° РїРѕР»Рµ РІРІРѕРґР°
   const composeInput = document.getElementById(`${ns}-compose-input`);
   const dropZone = (composeInput || previews).closest('.compose') || previews;
 
@@ -563,7 +563,7 @@ initComposePhoto('profile');
 watchComposeEmpty('feed-compose-input');
 watchComposeEmpty('profile-compose-input');
 
-/* ── Post context menu ──────────────────────── */
+/* в”Ђв”Ђ Post context menu в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 (function () {
   const menu    = document.getElementById('post-ctx-menu');
   const btnCopy = document.getElementById('post-ctx-copy-link');
@@ -571,7 +571,7 @@ watchComposeEmpty('profile-compose-input');
 
   function openMenu(x, y, postId) {
     _postId = postId;
-    // Не дать меню выйти за правый/нижний край экрана
+    // РќРµ РґР°С‚СЊ РјРµРЅСЋ РІС‹Р№С‚Рё Р·Р° РїСЂР°РІС‹Р№/РЅРёР¶РЅРёР№ РєСЂР°Р№ СЌРєСЂР°РЅР°
     const mw = 200, mh = 60;
     const px = x + mw > window.innerWidth  ? x - mw : x;
     const py = y + mh > window.innerHeight ? y - mh : y;
@@ -585,7 +585,7 @@ watchComposeEmpty('profile-compose-input');
     _postId = null;
   }
 
-  // ПКМ на посте
+  // РџРљРњ РЅР° РїРѕСЃС‚Рµ
   document.addEventListener('contextmenu', e => {
     const postEl = e.target.closest('.post[data-post-id]');
     if (!postEl) { closeMenu(); return; }
@@ -593,12 +593,12 @@ watchComposeEmpty('profile-compose-input');
     openMenu(e.clientX, e.clientY, postEl.dataset.postId);
   });
 
-  // Закрыть при клике куда угодно
+  // Р—Р°РєСЂС‹С‚СЊ РїСЂРё РєР»РёРєРµ РєСѓРґР° СѓРіРѕРґРЅРѕ
   document.addEventListener('mousedown', e => {
     if (!menu.contains(e.target)) closeMenu();
   });
 
-  // Закрыть при скролле
+  // Р—Р°РєСЂС‹С‚СЊ РїСЂРё СЃРєСЂРѕР»Р»Рµ
   document.addEventListener('scroll', closeMenu, true);
 
   btnCopy.addEventListener('click', () => {
@@ -609,8 +609,19 @@ watchComposeEmpty('profile-compose-input');
   });
 })();
 
-/* ── Spam toast + button cooldown ──────────── */
+/* в”Ђв”Ђ Spam toast + button cooldown в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 let _toastTimer = null;
+
+function restorePostButton(btnEl, text = null) {
+  if (!btnEl) return;
+  const idleText = text || btnEl.dataset.idleText || btnEl.dataset.origText || '\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u044c';
+  btnEl.textContent = idleText;
+  btnEl.disabled = false;
+  btnEl.classList.remove('btn-post--loading');
+  delete btnEl.dataset.idleText;
+  delete btnEl.dataset.origText;
+  delete btnEl.dataset.cooldownTimer;
+}
 
 function showPostError(message, btnEl) {
   // Toast
@@ -626,15 +637,37 @@ function showPostError(message, btnEl) {
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => toast.classList.remove('post-error-toast--visible'), 3500);
 
-  // Если передана кнопка и в сообщении есть кулдаун — блокируем с обратным отсчётом
   if (!btnEl) return;
-  const match = message.match(/(\d+)\s*сек/);
+  const cooldownMatch = String(message).match(/(\d+)\s*(?:\u0441\u0435\u043a|\u0441\b|sec|seconds?)/i);
+  if (!cooldownMatch) return;
+  let cooldownSecs = parseInt(cooldownMatch[1]);
+  const restoreText = btnEl.dataset.idleText || btnEl.dataset.origText || '\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u044c';
+  if (btnEl.dataset.cooldownTimer) clearInterval(Number(btnEl.dataset.cooldownTimer));
+  btnEl.dataset.origText = restoreText;
+  btnEl.classList.remove('btn-post--loading');
+  btnEl.disabled = true;
+  btnEl.textContent = `${cooldownSecs}\u0441`;
+  const cooldownTimer = setInterval(() => {
+    cooldownSecs--;
+    if (cooldownSecs <= 0) {
+      clearInterval(cooldownTimer);
+      restorePostButton(btnEl, restoreText);
+    } else {
+      btnEl.textContent = `${cooldownSecs}\u0441`;
+    }
+  }, 1000);
+  btnEl.dataset.cooldownTimer = String(cooldownTimer);
+  return;
+
+  // Р•СЃР»Рё РїРµСЂРµРґР°РЅР° РєРЅРѕРїРєР° Рё РІ СЃРѕРѕР±С‰РµРЅРёРё РµСЃС‚СЊ РєСѓР»РґР°СѓРЅ вЂ” Р±Р»РѕРєРёСЂСѓРµРј СЃ РѕР±СЂР°С‚РЅС‹Рј РѕС‚СЃС‡С‘С‚РѕРј
+  if (!btnEl) return;
+  const match = message.match(/(\d+)\s*СЃРµРє/);
   if (!match) return;
   let secs = parseInt(match[1]);
   const origText = btnEl.dataset.origText || btnEl.textContent;
   btnEl.dataset.origText = origText;
   btnEl.disabled = true;
-  btnEl.textContent = `${secs}с`;
+  btnEl.textContent = `${secs}СЃ`;
   const iv = setInterval(() => {
     secs--;
     if (secs <= 0) {
@@ -642,12 +675,12 @@ function showPostError(message, btnEl) {
       btnEl.disabled = false;
       btnEl.textContent = origText;
     } else {
-      btnEl.textContent = `${secs}с`;
+      btnEl.textContent = `${secs}СЃ`;
     }
   }, 1000);
 }
 
-/* ── Utils ─────────────────────────────────── */
+/* в”Ђв”Ђ Utils в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -665,7 +698,7 @@ function formatPostTime(ts) {
   return `${hh}:${mm}`;
 }
 
-const MONTHS_RU = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const MONTHS_RU = ['СЏРЅРІР°СЂСЏ','С„РµРІСЂР°Р»СЏ','РјР°СЂС‚Р°','Р°РїСЂРµР»СЏ','РјР°СЏ','РёСЋРЅСЏ','РёСЋР»СЏ','Р°РІРіСѓСЃС‚Р°','СЃРµРЅС‚СЏР±СЂСЏ','РѕРєС‚СЏР±СЂСЏ','РЅРѕСЏР±СЂСЏ','РґРµРєР°Р±СЂСЏ'];
 
 function getDateKey(ts) {
   const d = new Date(ts);
@@ -674,9 +707,9 @@ function getDateKey(ts) {
 
 function formatDateLabel(ts) {
   const d = new Date(ts), now = new Date();
-  if (d.toDateString() === now.toDateString()) return 'Сегодня';
+  if (d.toDateString() === now.toDateString()) return 'РЎРµРіРѕРґРЅСЏ';
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Вчера';
+  if (d.toDateString() === yesterday.toDateString()) return 'Р’С‡РµСЂР°';
   return `${d.getDate()} ${MONTHS_RU[d.getMonth()]}`;
 }
 
@@ -687,7 +720,7 @@ function buildDateSeparator(ts) {
   return el;
 }
 function isHeartOnly(text) {
-  return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
+  return /^[\s]*[вќ¤пёЏрџ¤Ќрџ’•рџ’—рџ’“рџ’ћрџ’рџ’ќрџ–¤рџ¤Ћрџ’њрџ’™рџ’љрџ’›рџ§Ўв™Ґвќ¤пёЏ]+[\s]*$/u.test(text.trim());
 }
 
 let _emojiRegex = null;
@@ -716,7 +749,7 @@ function buildPostTextEl(text) {
     return p;
   }
 
-  // Разбиваем текст по переносам строк и создаём текстовые узлы
+  // Р Р°Р·Р±РёРІР°РµРј С‚РµРєСЃС‚ РїРѕ РїРµСЂРµРЅРѕСЃР°Рј СЃС‚СЂРѕРє Рё СЃРѕР·РґР°С‘Рј С‚РµРєСЃС‚РѕРІС‹Рµ СѓР·Р»С‹
   const lines = text.split('\n');
   lines.forEach((line, index) => {
     p.appendChild(document.createTextNode(line));
@@ -741,7 +774,7 @@ function buildPostTextEl(text) {
           if (m.index > last) frag.appendChild(document.createTextNode(val.slice(last, m.index)));
           const file = emojiMap.get(m[0]);
           if (file) {
-            // placeholder — TGS загружается лениво через IntersectionObserver внутри createTgsPlayer
+            // placeholder вЂ” TGS Р·Р°РіСЂСѓР¶Р°РµС‚СЃСЏ Р»РµРЅРёРІРѕ С‡РµСЂРµР· IntersectionObserver РІРЅСѓС‚СЂРё createTgsPlayer
             const player = createTgsPlayer(file, 20, false, false, false);
             player.classList.add('post__text-tgs');
             frag.appendChild(player);
@@ -765,8 +798,8 @@ function buildPostTextEl(text) {
 }
 
 
-/* ── Server posts cache ─────────────────────── */
-const _serverPostsMap = new Map(); // id → post
+/* в”Ђв”Ђ Server posts cache в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+const _serverPostsMap = new Map(); // id в†’ post
 const _editingPostIds = new Set();
 
 function registerServerPost(post) {
@@ -793,7 +826,7 @@ function _saveReactions(id, reactions, myReactions) {
   } catch {}
 }
 
-/* ── Menu ───────────────────────────────────── */
+/* в”Ђв”Ђ Menu в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 let _openMenuId        = null;
 let _menuScrollCleanup = null;
 
@@ -835,7 +868,7 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   _openMenuId = id;
 }
 
-/* ── Shared post actions ────────────────────── */
+/* в”Ђв”Ђ Shared post actions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function startEditPost(id, postEl, onDone) {
   const existingEditor = postEl.querySelector('.post__edit-area');
   if (_editingPostIds.has(id) || postEl.classList.contains('post--editing') || existingEditor) {
@@ -860,11 +893,11 @@ function startEditPost(id, postEl, onDone) {
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className   = 'post__edit-btn post__edit-btn--cancel';
-  cancelBtn.textContent = 'Отмена';
+  cancelBtn.textContent = 'РћС‚РјРµРЅР°';
 
   const saveBtn = document.createElement('button');
   saveBtn.className   = 'post__edit-btn post__edit-btn--save';
-  saveBtn.textContent = 'Сохранить';
+  saveBtn.textContent = 'РЎРѕС…СЂР°РЅРёС‚СЊ';
 
   actions.append(cancelBtn, saveBtn);
   if (textWrap) {
@@ -898,9 +931,9 @@ function startEditPost(id, postEl, onDone) {
   };
   const failSave = message => {
     saveBtn.disabled = false;
-    saveBtn.textContent = saveBtn.dataset.idleText || 'Сохранить';
+    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
     delete saveBtn.dataset.idleText;
-    showPostError(message || 'Не удалось сохранить пост', saveBtn);
+    showPostError(message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚', saveBtn);
   };
 
   cancelBtn.addEventListener('click', e => {
@@ -911,14 +944,14 @@ function startEditPost(id, postEl, onDone) {
   saveBtn.addEventListener('click', async e => {
     e.preventDefault();
     const newText = textarea.value.trim();
-    if (!newText) { failSave('Текст не может быть пустым'); return; }
+    if (!newText) { failSave('РўРµРєСЃС‚ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј'); return; }
     saveBtn.dataset.idleText = saveBtn.textContent;
-    saveBtn.textContent = 'Сохранение...';
+    saveBtn.textContent = 'РЎРѕС…СЂР°РЅРµРЅРёРµ...';
     saveBtn.disabled = true;
 
     if (isServer) {
       const u = window._tgUsername;
-      if (!u) { failSave('Нужно войти в аккаунт'); return; }
+      if (!u) { failSave('РќСѓР¶РЅРѕ РІРѕР№С‚Рё РІ Р°РєРєР°СѓРЅС‚'); return; }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
       try {
@@ -936,7 +969,7 @@ function startEditPost(id, postEl, onDone) {
           mergeFeedPostsCache([nextPost]);
           if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
         } else {
-          let message = 'Не удалось сохранить пост';
+          let message = 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚';
           try {
             const data = await res.json();
             if (data?.detail) message = data.detail;
@@ -947,10 +980,10 @@ function startEditPost(id, postEl, onDone) {
       } catch (err) {
         clearTimeout(timeout);
         if (err.name === 'AbortError') {
-          failSave('Сервер не ответил, попробуй ещё раз');
+          failSave('РЎРµСЂРІРµСЂ РЅРµ РѕС‚РІРµС‚РёР», РїРѕРїСЂРѕР±СѓР№ РµС‰С‘ СЂР°Р·');
           return;
         }
-        failSave('Нет соединения с сервером');
+        failSave('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј');
         return;
       }
     } else {
@@ -958,7 +991,7 @@ function startEditPost(id, postEl, onDone) {
       const p = posts.find(p => p.id === id);
       if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
     }
-    saveBtn.textContent = saveBtn.dataset.idleText || 'Сохранить';
+    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
     delete saveBtn.dataset.idleText;
     closeEditor(isServer ? (_serverPostsMap.get(id)?.text || newText) : newText);
     onDone();
@@ -966,7 +999,7 @@ function startEditPost(id, postEl, onDone) {
 }
 
 function deletePost(id, onDone) {
-  // Если серверный пост — удаляем на сервере
+  // Р•СЃР»Рё СЃРµСЂРІРµСЂРЅС‹Р№ РїРѕСЃС‚ вЂ” СѓРґР°Р»СЏРµРј РЅР° СЃРµСЂРІРµСЂРµ
   if (_serverPostsMap.has(id)) {
     const u = window._tgUsername;
     if (u) {
@@ -1148,18 +1181,18 @@ function buildReactionsEl(post) {
   wrapper.dataset.postId = id;
 
   const others = Object.keys(post.reactions)
-    .filter(e => e !== '❤️' && (post.reactions[e] || 0) > 0)
+    .filter(e => e !== 'вќ¤пёЏ' && (post.reactions[e] || 0) > 0)
     .sort((a, b) => (post.reactions[b] || 0) - (post.reactions[a] || 0));
 
-  const heartCount = post.reactions['❤️'] || 0;
+  const heartCount = post.reactions['вќ¤пёЏ'] || 0;
   const totalOthers = others.length;
   let ordered;
   if (heartCount > 0) {
     const heartIdx = others.findIndex(e => (post.reactions[e] || 0) <= heartCount);
     const insertAt = heartIdx === -1 ? others.length : heartIdx;
-    ordered = [...others.slice(0, insertAt), '❤️', ...others.slice(insertAt)];
+    ordered = [...others.slice(0, insertAt), 'вќ¤пёЏ', ...others.slice(insertAt)];
   } else if (totalOthers === 0) {
-    ordered = ['❤️'];
+    ordered = ['вќ¤пёЏ'];
   } else {
     ordered = others;
   }
@@ -1193,7 +1226,7 @@ function syncReactions(id, post) {
 function applyReactionUpdate(postId, reactions) {
   const post = _serverPostsMap.get(postId);
   if (!post) return;
-  // Сохраняем myReactions текущего пользователя — сервер их не присылает в broadcast
+  // РЎРѕС…СЂР°РЅСЏРµРј myReactions С‚РµРєСѓС‰РµРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ вЂ” СЃРµСЂРІРµСЂ РёС… РЅРµ РїСЂРёСЃС‹Р»Р°РµС‚ РІ broadcast
   post.reactions = reactions;
   post.likes = getTotalReactions(post);
   syncReactions(postId, post);
@@ -1219,8 +1252,8 @@ async function toggleReaction(id, emoji) {
     } else {
       const existingTypes = Object.keys(post.reactions).filter(e => post.reactions[e] > 0);
       if (!existingTypes.includes(emoji) && existingTypes.length >= 6) return;
-      // вытесняем ❤️ если добавляем 6-ю уникальную не-❤️
-      const HEART = '❤️';
+      // РІС‹С‚РµСЃРЅСЏРµРј вќ¤пёЏ РµСЃР»Рё РґРѕР±Р°РІР»СЏРµРј 6-СЋ СѓРЅРёРєР°Р»СЊРЅСѓСЋ РЅРµ-вќ¤пёЏ
+      const HEART = 'вќ¤пёЏ';
       if (!existingTypes.includes(emoji) && existingTypes.length === 5 && emoji !== HEART && existingTypes.includes(HEART)) {
         delete post.reactions[HEART];
         post.myReactions = post.myReactions.filter(e => e !== HEART);
@@ -1260,7 +1293,7 @@ async function toggleReaction(id, emoji) {
   if (post.myReactions.includes(emoji)) {
     removeReaction(post, emoji);
   } else {
-    const activeTypes = new Set(['❤️', ...Object.keys(post.reactions).filter(e => post.reactions[e] > 0)]);
+    const activeTypes = new Set(['вќ¤пёЏ', ...Object.keys(post.reactions).filter(e => post.reactions[e] > 0)]);
     if (!activeTypes.has(emoji) && activeTypes.size >= 3) return;
     if (post.myReactions.length >= reactionLimit()) {
       removeReaction(post, post.myReactions[0]);
@@ -1274,7 +1307,7 @@ async function toggleReaction(id, emoji) {
   syncReactions(id, post);
 }
 
-/* ── Emoji picker ───────────────────────────── */
+/* в”Ђв”Ђ Emoji picker в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 let _emojiMenuCleanup = null;
 
 function closeEmojiMenu() {
@@ -1362,14 +1395,14 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
   setTimeout(() => document.addEventListener('click', closeEmojiMenu, { once: true }), 0);
 }
 
-/* ── Build post element ─────────────────────── */
+/* в”Ђв”Ђ Build post element в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
-  // Серверный пост: берём автора из самого поста
+  // РЎРµСЂРІРµСЂРЅС‹Р№ РїРѕСЃС‚: Р±РµСЂС‘Рј Р°РІС‚РѕСЂР° РёР· СЃР°РјРѕРіРѕ РїРѕСЃС‚Р°
   if (post.author) {
     const a   = post.author;
     const own = post.isOwn;
     const lp  = own ? getProfile() : null;
-    // Для своих постов используем локальный профиль — он актуален сразу после изменений
+    // Р”Р»СЏ СЃРІРѕРёС… РїРѕСЃС‚РѕРІ РёСЃРїРѕР»СЊР·СѓРµРј Р»РѕРєР°Р»СЊРЅС‹Р№ РїСЂРѕС„РёР»СЊ вЂ” РѕРЅ Р°РєС‚СѓР°Р»РµРЅ СЃСЂР°Р·Сѓ РїРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёР№
     profile    = own
       ? { name: lp.name, username: lp.username || a.profileUsername, verified: a.isVerified }
       : { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
@@ -1417,7 +1450,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     </svg>` : '';
   el.innerHTML = `
     ${verifiedGradientSvg}
-    ${showPin && post.pinned ? `<div class="post__pinned"><img class="post__pinned-icon" src="../../img/pin.svg" alt="" /><span>Закреплено</span></div>` : ''}
+    ${showPin && post.pinned ? `<div class="post__pinned"><img class="post__pinned-icon" src="../../img/pin.svg" alt="" /><span>Р—Р°РєСЂРµРїР»РµРЅРѕ</span></div>` : ''}
     <div class="post__header">
       <img class="avatar" src="${avatarSrc}" alt="" />
       <div class="post__meta">
@@ -1468,7 +1501,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
   mountVideoPlayers(el);
 
-  // Помечаем пост как многострочный для увеличенного градиента
+  // РџРѕРјРµС‡Р°РµРј РїРѕСЃС‚ РєР°Рє РјРЅРѕРіРѕСЃС‚СЂРѕС‡РЅС‹Р№ РґР»СЏ СѓРІРµР»РёС‡РµРЅРЅРѕРіРѕ РіСЂР°РґРёРµРЅС‚Р°
   requestAnimationFrame(() => {
     const textEl = el.querySelector('.post__text');
     const footerEl = el.querySelector('.post__footer');

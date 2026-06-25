@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const _feedEl = document.getElementById('feed');
 
@@ -52,20 +52,20 @@ async function renderFeedPosts() {
     _feedPage = Math.floor(cached.length / FEED_PAGE) + 1;
     if (cached.length >= FEED_PAGE) _attachFeedSentinel(container);
   } else {
-    container.innerHTML = '<p class="feed__empty">Загрузка...</p>';
+    container.innerHTML = '<p class="feed__empty">Р—Р°РіСЂСѓР·РєР°...</p>';
   }
 
   let posts;
   try { posts = await fetchFeedPage(1); }
   catch {
-    if (!cached.length) container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј</p>';
     return;
   }
 
   if (!posts.length) {
     reconcileFeedPostsCache(posts, FEED_PAGE);
     handleDeletedPostsMissingFromDom(container);
-    if (!cached.length) container.innerHTML = '<p class="feed__empty">Постов пока нет - напишите первый!</p>';
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">РџРѕСЃС‚РѕРІ РїРѕРєР° РЅРµС‚ - РЅР°РїРёС€РёС‚Рµ РїРµСЂРІС‹Р№!</p>';
     return;
   }
 
@@ -192,8 +192,8 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
         images: images.map(m => m.src),
       }),
     });
-    if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
-    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
+    if (res.status === 413) throw new Error('Р¤Р°Р№Р»С‹ СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РёРµ, СѓРјРµРЅСЊС€Рё СЂР°Р·РјРµСЂ РјРµРґРёР°');
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°'); }
 
     const post = await res.json();
     clearComposeInput('feed-compose-input');
@@ -203,7 +203,7 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     if (err.message === 'unauthorized') return;
     showPostError(err.message, btn);
   } finally {
-    if (!btn.textContent.match(/^\d+с$/)) btn.disabled = false;
+    if (!btn.dataset.cooldownTimer) btn.disabled = false;
   }
 });
 

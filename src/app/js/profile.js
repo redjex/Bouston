@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const _profileWrap = document.getElementById('profile-wrap');
 
@@ -102,7 +102,7 @@ async function renderProfilePosts() {
   const u = window._tgUsername;
 
   if (!u) {
-    container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
+    container.innerHTML = '<p class="feed__empty">РџРѕСЃС‚РѕРІ РїРѕРєР° РЅРµС‚</p>';
     return;
   }
 
@@ -110,7 +110,7 @@ async function renderProfilePosts() {
   if (cached.length) {
     _renderProfilePostsList(container, cached);
   } else {
-    container.innerHTML = '<p class="feed__empty">Загрузка...</p>';
+    container.innerHTML = '<p class="feed__empty">Р—Р°РіСЂСѓР·РєР°...</p>';
   }
 
   let posts;
@@ -119,14 +119,14 @@ async function renderProfilePosts() {
     if (!res.ok) throw new Error();
     posts = await res.json();
   } catch {
-    if (!cached.length) container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј</p>';
     return;
   }
 
   if (!posts.length) {
     reconcileProfilePostsCache(u, posts);
     container.querySelectorAll('.post[data-post-id]').forEach(removePostElWithSeparator);
-    if (!cached.length) container.innerHTML = '<p class="feed__empty">Постов пока нет</p>';
+    if (!cached.length) container.innerHTML = '<p class="feed__empty">РџРѕСЃС‚РѕРІ РїРѕРєР° РЅРµС‚</p>';
     return;
   }
 
@@ -180,7 +180,7 @@ function prependPostToProfile(post) {
   attachProfileMenu(container);
 }
 
-/* в”Ђв”Ђ Modal в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+/* РІвЂќР‚РІвЂќР‚ Modal РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
 let _pendingAvatar    = undefined;
 let _pendingBanner    = undefined;
 let _originalUsername = '';
@@ -301,8 +301,8 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   const newBanner  = _pendingBanner;
 
   if (newUser) {
-    if (newUser.length < 3) { showFieldError('input-username-profile', 'Минимум 3 символа'); return; }
-    if (newUser.length > 20) { showFieldError('input-username-profile', 'Максимум 20 символов'); return; }
+    if (newUser.length < 3) { showFieldError('input-username-profile', 'РњРёРЅРёРјСѓРј 3 СЃРёРјРІРѕР»Р°'); return; }
+    if (newUser.length > 20) { showFieldError('input-username-profile', 'РњР°РєСЃРёРјСѓРј 20 СЃРёРјРІРѕР»РѕРІ'); return; }
   }
   clearFieldError('input-username-profile');
 
@@ -328,7 +328,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        showFieldError('input-username-profile', d.detail || 'Ошибка сервера');
+        showFieldError('input-username-profile', d.detail || 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°');
         return;
       }
 
@@ -340,7 +340,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
       }
     }
   } catch (err) {
-    if (err.message !== 'unauthorized') showFieldError('input-username-profile', 'Нет соединения с сервером');
+    if (err.message !== 'unauthorized') showFieldError('input-username-profile', 'РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј');
     return;
   } finally {
     btn.disabled = false;
@@ -388,7 +388,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   }
 });
 
-/* в”Ђв”Ђ Profile compose в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+/* РІвЂќР‚РІвЂќР‚ Profile compose РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
 document.getElementById('profile-btn-post').addEventListener('click', async () => {
   const text   = getComposeText('profile-compose-input').trim();
   const images = getComposeImages('profile');
@@ -403,8 +403,8 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, images: images.map(m => m.src) }),
     });
-    if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
-    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
+    if (res.status === 413) throw new Error('Р¤Р°Р№Р»С‹ СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РёРµ, СѓРјРµРЅСЊС€Рё СЂР°Р·РјРµСЂ РјРµРґРёР°');
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°'); }
 
     const post = await res.json();
     clearComposeInput('profile-compose-input');
@@ -415,7 +415,7 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     if (err.message === 'unauthorized') return;
     showPostError(err.message, btn);
   } finally {
-    if (!btn.textContent.match(/^\d+с$/)) btn.disabled = false;
+    if (!btn.dataset.cooldownTimer) btn.disabled = false;
   }
 });
 

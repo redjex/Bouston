@@ -495,7 +495,7 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     if (err.message === 'unauthorized') return;
     showPostError(err.message, btn);
   } finally {
-    if (!btn.textContent.match(/^\d+с$/)) setButtonBusy(btn, false);
+    if (!btn.dataset.cooldownTimer) setButtonBusy(btn, false);
   }
 });
 

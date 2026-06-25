@@ -27,9 +27,19 @@ POSTS_QUERY = """
            u.avatar_path  AS author_avatar_path,
            u.is_premium   AS author_premium,
            u.verified     AS author_verified,
-           u.updated_at   AS updated_at
+           u.updated_at   AS updated_at,
+           rp.id          AS reply_id,
+           rp.text        AS reply_text,
+           rp.images      AS reply_images,
+           rp.created_at  AS reply_created_at,
+           ru.username    AS reply_tg_username,
+           ru.display_name AS reply_display_name,
+           ru.first_name  AS reply_first_name,
+           ru.profile_username AS reply_profile_username
     FROM posts p
     JOIN users u ON u.username = p.tg_username
+    LEFT JOIN posts rp ON rp.id = p.reply_to_id
+    LEFT JOIN users ru ON ru.username = rp.tg_username
 """
 
 COMMENTS_QUERY = """
@@ -166,6 +176,7 @@ async def init_db() -> None:
         cursor = await conn.execute("PRAGMA table_info(posts)")
         pcols = [r[1] for r in await cursor.fetchall()]
         if 'edited_at' not in pcols: await conn.execute("ALTER TABLE posts ADD COLUMN edited_at REAL")
+        if 'reply_to_id' not in pcols: await conn.execute("ALTER TABLE posts ADD COLUMN reply_to_id INTEGER")
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS post_reactions (
@@ -400,10 +411,26 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
 
     avatar_url, avatar_preview_url = avatar_urls(row["tg_username"], row["author_avatar_path"], row["updated_at"])
 
+    reply_to = None
+    if row["reply_id"]:
+        reply_images_raw = json.loads(row["reply_images"] or "[]")
+        reply_to = {
+            "id":        row["reply_id"],
+            "text":      row["reply_text"] or "",
+            "hasMedia":  bool(reply_images_raw),
+            "createdAt": int(row["reply_created_at"] * 1000) if row["reply_created_at"] else None,
+            "author": {
+                "tgUsername":      row["reply_tg_username"],
+                "displayName":     row["reply_display_name"] or row["reply_first_name"] or row["reply_tg_username"],
+                "profileUsername": row["reply_profile_username"] or row["reply_tg_username"],
+            },
+        }
+
     return {
         "id":           row["id"],
         "text":         row["text"] or "",
         "images":       image_urls,
+        "replyTo":      reply_to,
         "pinned":       bool(row["pinned"]),
         "pinnedAt":     int(row["pinned_at"] * 1000) if row["pinned_at"] else None,
         "createdAt":    int(row["created_at"] * 1000),

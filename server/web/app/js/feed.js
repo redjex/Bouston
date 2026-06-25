@@ -92,7 +92,7 @@ async function renderFeedPosts() {
   if (cached.length) {
     _renderFeedPostsList(container, cached);
     _feedRendered = true;
-    _feedPage = Math.floor(cached.length / FEED_PAGE) + 1;
+    _feedPage = 1;
     if (cached.length >= FEED_PAGE) _attachFeedSentinel(container);
   } else {
     renderPostSkeletons(container, 4);
@@ -132,8 +132,10 @@ async function refreshFeedFromServer(container, options = {}) {
       renderFeedIfMissingPosts(container, merged);
     }
     _feedRendered = true;
-    _feedPage = Math.floor(merged.length / FEED_PAGE) + 1;
+    _feedPage = 2;
     if (posts.length < FEED_PAGE) { _feedDone = true; return; }
+    const cachedPageCount = Math.max(1, Math.ceil(getFeedPostsCache().length / FEED_PAGE));
+    fillFeedGapsFromServer(container, 2, cachedPageCount);
     if (!container.querySelector('.feed-sentinel')) _attachFeedSentinel(container);
   })().finally(() => { _feedRefreshPromise = null; });
 
@@ -174,6 +176,28 @@ function renderFeedIfMissingPosts(container, posts) {
 
 function findFeedPostEl(container, id) {
   return container.querySelector(`.post[data-post-id="${id}"]`);
+}
+
+async function fillFeedGapsFromServer(container, startPage, maxPage) {
+  if (_feedGapFillPromise || startPage > maxPage || _feedDone) return _feedGapFillPromise;
+
+  _feedGapFillPromise = (async () => {
+    for (let page = startPage; page <= maxPage; page++) {
+      if (!container.isConnected || _feedDone) break;
+      let posts;
+      try { posts = await fetchFeedPage(page); }
+      catch { break; }
+      if (!posts.length) { _feedDone = true; break; }
+      posts.forEach(p => registerServerPost(p));
+      const merged = mergeFeedPostsCache(posts);
+      syncFeedPostsIntoDom(container, merged);
+      _feedPage = Math.max(_feedPage, page + 1);
+      if (posts.length < FEED_PAGE) { _feedDone = true; break; }
+    }
+    if (!_feedDone && !container.querySelector('.feed-sentinel')) _attachFeedSentinel(container);
+  })().finally(() => { _feedGapFillPromise = null; });
+
+  return _feedGapFillPromise;
 }
 
 function handleDeletedPostsMissingFromDom(container) {
@@ -265,12 +289,12 @@ function _attachFeedSentinel(container) {
     _feedObserver.disconnect();
     s.remove();
     try {
-      const posts = await fetchFeedPage(_feedPage);
+      const page = _feedPage;
+      const posts = await fetchFeedPage(page);
       posts.forEach(p => registerServerPost(p));
-      mergeFeedPostsCache(posts);
-      const freshPosts = posts.filter(p => !container.querySelector(`.post[data-post-id="${p.id}"]`));
-      _appendPostsToFeed(container, freshPosts, true);
-      _feedPage++;
+      const merged = mergeFeedPostsCache(posts);
+      syncFeedPostsIntoDom(container, merged);
+      _feedPage = page + 1;
       if (posts.length < FEED_PAGE) { _feedDone = true; }
       else _attachFeedSentinel(container);
     } catch {}
@@ -297,16 +321,19 @@ function prependPostToFeed(post) {
 function setButtonBusy(btn, busy, text = 'Загрузка...') {
   if (!btn) return;
   if (busy) {
-    btn.dataset.idleText = btn.textContent;
+    if (!btn.dataset.idleText) btn.dataset.idleText = btn.textContent || 'Выставить';
     btn.textContent = text;
     btn.classList.add('btn-post--loading');
     btn.disabled = true;
     return;
   }
-  btn.textContent = btn.dataset.idleText || btn.textContent;
-  delete btn.dataset.idleText;
-  btn.classList.remove('btn-post--loading');
-  btn.disabled = false;
+  if (typeof restorePostButton === 'function') restorePostButton(btn, btn.dataset.idleText || 'Выставить');
+  else {
+    btn.textContent = btn.dataset.idleText || 'Выставить';
+    delete btn.dataset.idleText;
+    btn.classList.remove('btn-post--loading');
+    btn.disabled = false;
+  }
 }
 
 document.getElementById('feed-btn-post').addEventListener('click', async () => {
@@ -334,7 +361,7 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     if (err.message === 'unauthorized') return;
     showPostError(err.message, btn);
   } finally {
-    if (!btn.textContent.match(/^\d+с$/)) setButtonBusy(btn, false);
+    if (!btn.dataset.cooldownTimer) setButtonBusy(btn, false);
   }
 });
 
