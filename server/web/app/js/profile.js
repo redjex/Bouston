@@ -472,6 +472,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
 document.getElementById('profile-btn-post').addEventListener('click', async () => {
   const text   = getComposeText('profile-compose-input').trim();
   const images = getComposeImages('profile');
+  const replyToPostId = getComposeReplyTargetId('profile');
   if (!text && !images.length) return;
 
   const btn = document.getElementById('profile-btn-post');
@@ -481,7 +482,7 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     const res = await apiFetch(`${API}/posts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, images: images.map(m => m.src) }),
+      body: JSON.stringify({ text, images: images.map(m => m.src), replyToPostId }),
     });
     if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
@@ -489,6 +490,7 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     const post = await res.json();
     clearComposeInput('profile-compose-input');
     clearComposeImages('profile');
+    clearComposeReplyTarget('profile');
     prependPostToProfile(post);
     if (typeof prependPostToFeed === 'function') prependPostToFeed(post);
   } catch (err) {

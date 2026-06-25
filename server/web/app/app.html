@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Inter:wght@400;500;600;700&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=computer,photo_camera,smartphone" />
-  <link rel="stylesheet" href="css/app.css?v=profile-sticky-card-20260623-1" />
+  <link rel="stylesheet" href="css/app.css?v=reply-posts-20260625-4" />
 </head>
 <body>
   <div id="view-feed" class="view view--active">
@@ -374,6 +374,10 @@
   </div>
 
   <div id="post-ctx-menu" class="post-ctx-menu">
+    <button class="post-ctx-menu__item" id="post-ctx-reply">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+      Ответить постом
+    </button>
     <button class="post-ctx-menu__item" id="post-ctx-copy-link">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
       Копировать ссылку
@@ -406,9 +410,9 @@
   <script src="js/tgs.js?v=reactions-batch-20260621-4"></script>
   <script src="js/storage.js?v=cache-sync-20260625-1"></script>
   <script src="js/notifications.js?v=mentions-20260625-2"></script>
-  <script src="js/posts.js?v=reaction-date-fix-20260625-1"></script>
-  <script src="js/feed.js?v=server-gap-fill-20260625-1"></script>
-  <script src="js/profile.js?v=button-reset-20260625-1"></script>
+  <script src="js/posts.js?v=reply-posts-20260625-4"></script>
+  <script src="js/feed.js?v=reply-posts-20260625-1"></script>
+  <script src="js/profile.js?v=reply-posts-20260625-1"></script>
   <script src="js/thread.js?v=comment-notify-20260625-1"></script>
   <script src="js/user-profile.js?v=profile-settings-island-20260621-2"></script>
   <script src="js/settings.js?v=mobile-20260621-3"></script>

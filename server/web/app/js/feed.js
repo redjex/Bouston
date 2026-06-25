@@ -339,6 +339,7 @@ function setButtonBusy(btn, busy, text = 'Загрузка...') {
 document.getElementById('feed-btn-post').addEventListener('click', async () => {
   const text   = getComposeText('feed-compose-input').trim();
   const images = getComposeImages('feed');
+  const replyToPostId = getComposeReplyTargetId('feed');
   if (!text && !images.length) return;
 
   const btn = document.getElementById('feed-btn-post');
@@ -348,7 +349,7 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     const res = await apiFetch(`${API}/posts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, images: images.map(m => m.src) }),
+      body: JSON.stringify({ text, images: images.map(m => m.src), replyToPostId }),
     });
     if (res.status === 413) throw new Error('Файлы слишком большие, уменьши размер медиа');
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
@@ -356,6 +357,7 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     const post = await res.json();
     clearComposeInput('feed-compose-input');
     clearComposeImages('feed');
+    clearComposeReplyTarget('feed');
     prependPostToFeed(post);
   } catch (err) {
     if (err.message === 'unauthorized') return;

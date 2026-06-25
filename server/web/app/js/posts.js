@@ -425,12 +425,108 @@ function watchComposeEmpty(id) {
 
 /* в”Ђв”Ђ Compose photo в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 const _composeImages = { feed: [], profile: [] };
+const _composeReplyTargets = { feed: null, profile: null };
 
 function getComposeImages(ns) { return _composeImages[ns] || []; }
 function clearComposeImages(ns) {
   _composeImages[ns] = [];
   const el = document.getElementById(`${ns}-compose-previews`);
   if (el) el.innerHTML = '';
+}
+
+function getComposeReplyTargetId(ns) {
+  return _composeReplyTargets[ns]?.id || null;
+}
+
+function makeReplySnippet(post) {
+  const text = (post?.text || '').replace(/\s+/g, ' ').trim();
+  if (text) return text.length > 96 ? text.slice(0, 93) + '...' : text;
+  if (post?.hasMedia || (post?.images && post.images.length)) return '\u041c\u0435\u0434\u0438\u0430';
+  return '\u041f\u043e\u0441\u0442';
+}
+
+function makeReplyAuthorName(post) {
+  const author = post?.author || {};
+  return author.displayName || author.profileUsername || author.tgUsername || '\u041f\u043e\u0441\u0442';
+}
+
+let _replyDockEl = null;
+
+function ensureReplyDock() {
+  if (_replyDockEl) return _replyDockEl;
+  _replyDockEl = document.createElement('div');
+  _replyDockEl.className = 'reply-dock';
+  document.body.appendChild(_replyDockEl);
+  return _replyDockEl;
+}
+
+function renderReplyDock(ns, post) {
+  const dock = ensureReplyDock();
+  if (!post) {
+    dock.classList.remove('reply-dock--visible');
+    dock.innerHTML = '';
+    return;
+  }
+  dock.innerHTML = `
+    <button class="reply-dock__body" type="button">
+      <span class="reply-dock__label">\u041e\u0442\u0432\u0435\u0447\u0430\u0435\u043c \u043d\u0430 \u043f\u043e\u0441\u0442</span>
+      <span class="reply-dock__author">${escapeHtml(makeReplyAuthorName(post))}</span>
+      <span class="reply-dock__text">${escapeHtml(makeReplySnippet(post))}</span>
+    </button>
+    <button class="reply-dock__close" type="button" aria-label="Close">&times;</button>
+  `;
+  dock.querySelector('.reply-dock__body').addEventListener('click', () => {
+    const input = document.getElementById(`${ns}-compose-input`);
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus();
+  });
+  dock.querySelector('.reply-dock__close').addEventListener('click', () => clearComposeReplyTarget(ns));
+  dock.classList.add('reply-dock--visible');
+}
+
+function renderComposeReplyTarget(ns) {
+  const compose = document.getElementById(`${ns}-compose-input`)?.closest('.compose');
+  if (!compose) return;
+  compose.querySelector('.compose-reply')?.remove();
+
+  const post = _composeReplyTargets[ns];
+  compose.classList.toggle('compose--replying', !!post);
+  renderReplyDock(ns, null);
+  if (!post) return;
+
+  const box = document.createElement('div');
+  box.className = 'compose-reply';
+  box.innerHTML = `
+    <div class="compose-reply__bar"></div>
+    <div class="compose-reply__body">
+      <div class="compose-reply__label">\u041e\u0442\u0432\u0435\u0447\u0430\u0435\u043c \u043d\u0430 \u043f\u043e\u0441\u0442</div>
+      <div class="compose-reply__author">${escapeHtml(makeReplyAuthorName(post))}</div>
+      <div class="compose-reply__text">${escapeHtml(makeReplySnippet(post))}</div>
+    </div>
+    <button class="compose-reply__close" type="button" aria-label="Close">&times;</button>
+  `;
+  box.querySelector('.compose-reply__close').addEventListener('click', () => clearComposeReplyTarget(ns));
+  compose.insertBefore(box, compose.firstElementChild);
+}
+
+function clearComposeReplyTarget(ns) {
+  _composeReplyTargets[ns] = null;
+  renderComposeReplyTarget(ns);
+}
+
+function setComposeReplyTarget(ns, postId) {
+  const post = getPostById(Number(postId));
+  if (!post) return;
+  _composeReplyTargets[ns] = post;
+  renderComposeReplyTarget(ns);
+  const input = document.getElementById(`${ns}-compose-input`);
+  input?.focus();
+  input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function getComposeScopeFromPostEl(postEl) {
+  if (postEl.closest('#view-profile, #profile-posts-container')) return 'profile';
+  return 'feed';
 }
 
 function initComposePhoto(ns) {
@@ -461,7 +557,7 @@ function initComposePhoto(ns) {
 
       const rm = document.createElement('button');
       rm.className = 'compose__preview-remove';
-      rm.textContent = 'Г—';
+      rm.textContent = '\u00d7';
       rm.addEventListener('click', () => {
         const idx = _composeImages[ns].findIndex(m => m.src === dataUrl);
         if (idx !== -1) _composeImages[ns].splice(idx, 1);
@@ -518,11 +614,14 @@ watchComposeEmpty('profile-compose-input');
 (function () {
   const menu    = document.getElementById('post-ctx-menu');
   const btnCopy = document.getElementById('post-ctx-copy-link');
+  const btnReply = document.getElementById('post-ctx-reply');
   let _postId   = null;
+  let _scope    = 'feed';
 
-  function openMenu(x, y, postId) {
+  function openMenu(x, y, postId, scope) {
     _postId = postId;
-    const mw = 200, mh = 60;
+    _scope = scope || 'feed';
+    const mw = 220, mh = 108;
     const px = x + mw > window.innerWidth  ? x - mw : x;
     const py = y + mh > window.innerHeight ? y - mh : y;
     menu.style.left = px + 'px';
@@ -539,7 +638,7 @@ watchComposeEmpty('profile-compose-input');
     const postEl = e.target.closest('.post[data-post-id]');
     if (!postEl) { closeMenu(); return; }
     e.preventDefault();
-    openMenu(e.clientX, e.clientY, postEl.dataset.postId);
+    openMenu(e.clientX, e.clientY, postEl.dataset.postId, getComposeScopeFromPostEl(postEl));
   });
 
   document.addEventListener('mousedown', e => { if (!menu.contains(e.target)) closeMenu(); });
@@ -551,6 +650,57 @@ watchComposeEmpty('profile-compose-input');
     navigator.clipboard.writeText(url).catch(() => {});
     closeMenu();
   });
+
+  btnReply?.addEventListener('click', () => {
+    if (!_postId) return;
+    setComposeReplyTarget(_scope, _postId);
+    closeMenu();
+  });
+})();
+
+(function () {
+  let active = null;
+
+  function resetActive() {
+    if (!active) return;
+    active.el.classList.remove('post--swiping', 'post--swipe-armed');
+    active.el.style.transform = '';
+    active = null;
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || !window.matchMedia('(max-width: 640px)').matches) return;
+    if (e.target.closest('button, a, input, textarea, [contenteditable], .post__images, .vplayer')) return;
+    const el = e.target.closest('.post[data-post-id]');
+    if (!el) return;
+    active = { el, id: el.dataset.postId, scope: getComposeScopeFromPostEl(el), x: e.clientX, y: e.clientY, dx: 0 };
+  }, { passive: true });
+
+  document.addEventListener('pointermove', e => {
+    if (!active) return;
+    const dx = e.clientX - active.x;
+    const dy = e.clientY - active.y;
+    if (Math.abs(dy) > 42 && Math.abs(dy) > Math.abs(dx)) { resetActive(); return; }
+    if (dx >= 0) return;
+    active.dx = dx;
+    const offset = Math.max(-54, dx * 0.42);
+    active.el.classList.add('post--swiping');
+    active.el.classList.toggle('post--swipe-armed', Math.abs(dx) > 72);
+    active.el.style.transform = `translateX(${offset}px)`;
+  }, { passive: true });
+
+  document.addEventListener('pointerup', () => {
+    if (!active) return;
+    const picked = Math.abs(active.dx) > 72;
+    const { el, id, scope } = active;
+    resetActive();
+    if (!picked) return;
+    setComposeReplyTarget(scope, id);
+    el.classList.add('post--reply-picked');
+    setTimeout(() => el.classList.remove('post--reply-picked'), 650);
+  }, { passive: true });
+
+  document.addEventListener('pointercancel', resetActive, { passive: true });
 })();
 
 /* в”Ђв”Ђ Spam toast в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
@@ -1323,6 +1473,21 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
 }
 
 /* в”Ђв”Ђ Build post element в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+function buildReplyPreviewHtml(replyTo) {
+  const author = makeReplyAuthorName(replyTo);
+  const text = makeReplySnippet(replyTo);
+  return `
+    <div class="post-reply" data-reply-id="${replyTo.id || ''}">
+      <div class="post-reply__line"></div>
+      <div class="post-reply__body">
+        <div class="post-reply__label">\u041e\u0442\u0432\u0435\u0442</div>
+        <div class="post-reply__author">${escapeHtml(author)}</div>
+        <div class="post-reply__text">${escapeHtml(text)}</div>
+      </div>
+    </div>
+  `;
+}
+
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
   if (post.author) {
     const a   = post.author;
@@ -1349,6 +1514,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : '';
   const el = document.createElement('div');
   el.className = 'post post--enter' + extra;
+  if (post.replyTo) el.classList.add('post--has-reply');
   el.dataset.postId = post.id;
   if (post.author) el.dataset.author = post.author.tgUsername;
   else if (window._tgUsername) el.dataset.author = window._tgUsername;
@@ -1368,7 +1534,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
 
   el.innerHTML = `
     ${verifiedGradientSvg}
-    ${showPin && post.pinned ? `<div class="post__pinned"><img class="post__pinned-icon" src="/appimg/pin.svg" alt="" /><span>Р—Р°РєСЂРµРїР»РµРЅРѕ</span></div>` : ''}
+    ${showPin && post.pinned ? `<div class="post__pinned"><img class="post__pinned-icon" src="/appimg/pin.svg" alt="" /><span>\u0417\u0430\u043a\u0440\u0435\u043f\u043b\u0435\u043d\u043e</span></div>` : ''}
     <div class="post__header">
       <img class="avatar" src="${avatarSrc}" alt="" />
       <div class="post__meta">
@@ -1386,6 +1552,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         </button>
       </div>` : ''}
     </div>
+    ${post.replyTo ? buildReplyPreviewHtml(post.replyTo) : ''}
     ${post.text ? `<div class="post__text-wrap"></div>` : ''}
     ${post.images && post.images.length ? `
     <div class="post__images post__images--${Math.min(post.images.length, 4)}">
