@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from config import JWT_ALGO, JWT_SECRET
+from database import db_touch_auth_session
 from sse import _sse_subscribers
 
 router = APIRouter()
@@ -15,7 +16,10 @@ async def sse_events(token: str, request: Request):
     try:
         payload  = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
         username = payload.get("sub")
+        session_id = payload.get("jti")
         if not username:
+            raise HTTPException(401, "Invalid token")
+        if session_id and not await db_touch_auth_session(session_id, username):
             raise HTTPException(401, "Invalid token")
     except jwt.PyJWTError:
         raise HTTPException(401, "Invalid token")

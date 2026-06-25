@@ -15,7 +15,8 @@ function logout() {
   localStorage.removeItem('bouston_token');
   localStorage.removeItem('bouston_user');
   localStorage.removeItem('bouston_profile');
-  window.location.href = 'index.html';
+  document.cookie = 'bouston_token=; path=/; max-age=0; SameSite=Lax';
+  window.location.href = '/app';
 }
 
 async function apiFetch(url, options = {}) {

@@ -6,8 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth import normalize, require_auth
 from config import DB_PATH, JWT_ALGO, JWT_SECRET, MAX_COMMENT_TEXT
-from database import COMMENTS_QUERY, build_comment_response, db_get_user, fetch_comment_extras
+from database import (
+    COMMENTS_QUERY, build_comment_response, db_get_user, db_touch_auth_session,
+    fetch_comment_extras,
+)
 from models import CreateCommentRequest
+from sse import broadcast_event
 
 router = APIRouter()
 
@@ -19,14 +23,18 @@ async def get_comments(post_id: int, request: Request):
     if auth_header.startswith("Bearer "):
         try:
             payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
-            viewer = payload.get("sub", "")
+            candidate = payload.get("sub", "")
+            session_id = payload.get("jti", "")
+            if candidate and session_id and await db_touch_auth_session(session_id, candidate):
+                viewer = candidate
         except jwt.PyJWTError:
             pass
 
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute("SELECT id FROM posts WHERE id = ?", (post_id,))
-        if not await cursor.fetchone():
+        cursor = await conn.execute("SELECT id, tg_username FROM posts WHERE id = ?", (post_id,))
+        post_row = await cursor.fetchone()
+        if not post_row:
             raise HTTPException(404, "Пост не найден")
         cursor = await conn.execute(
             COMMENTS_QUERY + "WHERE c.post_id = ? ORDER BY c.created_at ASC", (post_id,)
@@ -53,8 +61,9 @@ async def create_comment(post_id: int, body: CreateCommentRequest, username: str
 
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute("SELECT id FROM posts WHERE id = ?", (post_id,))
-        if not await cursor.fetchone():
+        cursor = await conn.execute("SELECT id, tg_username FROM posts WHERE id = ?", (post_id,))
+        post_row = await cursor.fetchone()
+        if not post_row:
             raise HTTPException(404, "Пост не найден")
         cursor = await conn.execute(
             "INSERT INTO comments (post_id, tg_username, text, created_at) VALUES (?, ?, ?, ?)",
@@ -65,7 +74,16 @@ async def create_comment(post_id: int, body: CreateCommentRequest, username: str
         cursor = await conn.execute(COMMENTS_QUERY + "WHERE c.id = ?", (comment_id,))
         row = await cursor.fetchone()
         likes_count, my_like = await fetch_comment_extras(conn, comment_id, username)
-        return build_comment_response(row, username, likes_count, my_like)
+        comment_data = build_comment_response(row, username, likes_count, my_like)
+        event_comment_data = build_comment_response(row, "", likes_count, False)
+
+    await broadcast_event({
+        "type":      "new_comment",
+        "postId":    post_id,
+        "postOwner": post_row["tg_username"],
+        "comment":   event_comment_data,
+    })
+    return comment_data
 
 
 @router.delete("/posts/{post_id}/comments/{comment_id}")

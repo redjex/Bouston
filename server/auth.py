@@ -11,6 +11,7 @@ from config import (
     BLOCK_DURATIONS, JWT_ALGO, JWT_SECRET, POST_COOLDOWN, POST_WINDOW,
     POST_WINDOW_MAX,
 )
+from database import db_touch_auth_session
 
 log = logging.getLogger(__name__)
 
@@ -97,12 +98,15 @@ def normalize(username: str) -> str:
 _bearer = HTTPBearer()
 
 
-def require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> str:
+async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> str:
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGO])
         username: str = payload.get("sub", "")
+        session_id: str = payload.get("jti", "")
         if not username:
-            raise HTTPException(401, "Недействительный токен")
+            raise HTTPException(401, "Invalid token")
+        if session_id and not await db_touch_auth_session(session_id, username):
+            raise HTTPException(401, "Session ended. Sign in again")
         return username
     except jwt.ExpiredSignatureError:
         raise HTTPException(401, "Токен истёк, войдите снова")

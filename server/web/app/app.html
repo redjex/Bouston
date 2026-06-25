@@ -8,30 +8,28 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Inter:wght@400;500;600;700&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=photo_camera" />
-  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=computer,photo_camera,smartphone" />
+  <link rel="stylesheet" href="css/app.css?v=mobile-reply-gradient-20260625-1" />
 </head>
 <body>
-
-  <!-- ══ VIEW: FEED ══════════════════════════ -->
   <div id="view-feed" class="view view--active">
     <div class="feed" id="feed">
 
       <div class="compose">
         <div class="compose__row">
           <img class="avatar" id="feed-compose-avatar" src="/appimg/default_avatar.png" alt="" />
-          <div class="compose__input" id="feed-compose-input" contenteditable="true" data-placeholder="Напишите что нибудь..." role="textbox"></div>
+          <div class="compose__input" id="feed-compose-input" contenteditable="true" data-placeholder="РќР°РїРёС€РёС‚Рµ С‡С‚Рѕ РЅРёР±СѓРґСЊ..." role="textbox"></div>
         </div>
         <div class="compose__previews" id="feed-compose-previews"></div>
         <div class="compose__footer">
-          <label class="btn-photo" for="feed-photo-input" title="Добавить фото">
+          <label class="btn-photo" for="feed-photo-input" title="Р”РѕР±Р°РІРёС‚СЊ С„РѕС‚Рѕ">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </label>
           <input type="file" id="feed-photo-input" accept="image/*,video/*" multiple style="display:none" />
-          <button class="btn-photo btn-emoji-open" data-target="feed-compose-input" title="Добавить эмодзи">
+          <button class="btn-photo btn-emoji-open" data-target="feed-compose-input" title="Р”РѕР±Р°РІРёС‚СЊ СЌРјРѕРґР·Рё">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
           </button>
-          <button class="btn-post" id="feed-btn-post">Выставить</button>
+          <button class="btn-post" id="feed-btn-post">Р’С‹СЃС‚Р°РІРёС‚СЊ</button>
         </div>
       </div>
 
@@ -39,15 +37,25 @@
     </div>
   </div>
 
-  <!-- ══ VIEW: PROFILE ═══════════════════════ -->
   <div id="view-profile" class="view">
+    <div class="profile-sticky-card" id="profile-sticky-card" aria-hidden="true">
+      <img class="profile-sticky-card__avatar" id="profile-sticky-avatar" src="/appimg/default_avatar.png" alt="" />
+      <div class="profile-sticky-card__info">
+        <div class="profile-sticky-card__namerow">
+          <span class="profile-sticky-card__name" id="profile-sticky-name"></span>
+          <img class="profile-sticky-card__verified" id="profile-sticky-verified" src="/appimg/verided.svg" alt="verified" />
+        </div>
+        <span class="profile-sticky-card__username" id="profile-sticky-username"></span>
+      </div>
+    </div>
+
     <div class="profile-wrap" id="profile-wrap">
 
       <div class="profile-card" id="profile-card">
         <div class="profile-card__banner">
           <img class="profile-card__banner-img" id="banner-img" src="" alt="" />
           <div class="profile-card__banner-placeholder" id="banner-placeholder"></div>
-          <button class="btn-banner-settings" id="btn-banner-settings" title="Настройки профиля">
+          <button class="btn-banner-settings" id="btn-banner-settings" title="РќР°СЃС‚СЂРѕР№РєРё РїСЂРѕС„РёР»СЏ">
             <img src="/appimg/settings.svg" alt="settings" />
           </button>
         </div>
@@ -71,25 +79,24 @@
       <div class="compose">
         <div class="compose__row">
           <img class="avatar" id="profile-compose-avatar" src="/appimg/default_avatar.png" alt="" />
-          <div class="compose__input" id="profile-compose-input" contenteditable="true" data-placeholder="Напишите что нибудь..." role="textbox"></div>
+          <div class="compose__input" id="profile-compose-input" contenteditable="true" data-placeholder="РќР°РїРёС€РёС‚Рµ С‡С‚Рѕ РЅРёР±СѓРґСЊ..." role="textbox"></div>
         </div>
         <div class="compose__previews" id="profile-compose-previews"></div>
         <div class="compose__footer">
-          <label class="btn-photo" for="profile-photo-input" title="Добавить фото">
+          <label class="btn-photo" for="profile-photo-input" title="Р”РѕР±Р°РІРёС‚СЊ С„РѕС‚Рѕ">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </label>
           <input type="file" id="profile-photo-input" accept="image/*,video/*" multiple style="display:none" />
-          <button class="btn-photo btn-emoji-open" data-target="profile-compose-input" title="Добавить эмодзи">
+          <button class="btn-photo btn-emoji-open" data-target="profile-compose-input" title="Р”РѕР±Р°РІРёС‚СЊ СЌРјРѕРґР·Рё">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
           </button>
-          <button class="btn-post" id="profile-btn-post">Выставить</button>
+          <button class="btn-post" id="profile-btn-post">Написать комментарий</button>
         </div>
       </div>
 
       <div id="profile-posts-container"></div>
     </div>
 
-    <!-- Edit Modal -->
     <div class="edit-modal" id="edit-modal" hidden>
       <div class="edit-modal__box">
         <div class="edit-modal__header">
@@ -123,7 +130,7 @@
           </div>
           <div class="edit-field">
             <label>Описание</label>
-            <input id="input-bio" type="text" placeholder="Расскажи о себе" />
+            <input id="input-bio" type="text" placeholder="Р Р°СЃСЃРєР°Р¶Рё Рѕ СЃРµР±Рµ" />
           </div>
         </div>
         <div class="edit-modal__footer">
@@ -134,7 +141,105 @@
     </div>
   </div>
 
-  <!-- ══ VIEW: USER PROFILE ══════ -->
+  <div id="view-settings" class="view">
+    <div class="settings-wrap" id="settings-wrap">
+      <section class="settings-profile" id="settings-profile">
+        <img class="settings-profile__avatar" id="settings-avatar" src="/appimg/default_avatar.png" alt="" />
+        <div class="settings-profile__info">
+          <div class="settings-profile__namerow">
+            <span class="settings-profile__name" id="settings-name">Bouston</span>
+            <img class="settings-profile__verified" id="settings-verified" src="/appimg/verided.svg" alt="" hidden />
+          </div>
+          <span class="settings-profile__username" id="settings-username"></span>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <div class="settings-section__head">
+          <span class="settings-section__title">Аккаунты</span>
+          <span class="settings-section__limit" id="settings-account-limit"></span>
+        </div>
+        <div class="accounts-list" id="settings-accounts-list"></div>
+        <button class="account-add" id="settings-add-account">
+          <span class="account-add__icon">+</span>
+          <span>Добавить аккаунт</span>
+        </button>
+      </section>
+
+      <section class="settings-section settings-section--privacy">
+        <button class="settings-action" id="settings-privacy-toggle" type="button">
+          <span class="settings-action__body">
+            <span class="settings-action__title">Конфиденциальность</span>
+            <span class="settings-action__sub">Активные входы</span>
+          </span>
+          <span class="settings-action__chevron">></span>
+        </button>
+        <div class="privacy-panel" id="settings-privacy-panel" hidden>
+          <div class="privacy-panel__head">
+            <span class="privacy-panel__title">История входов</span>
+            <span class="privacy-panel__sub">Только активные устройства</span>
+          </div>
+          <div class="login-sessions" id="settings-login-sessions"></div>
+        </div>
+      </section>
+
+      <section class="settings-section settings-section--customization">
+        <button class="settings-action" id="settings-customization-toggle" type="button">
+          <span class="settings-action__body">
+            <span class="settings-action__title">Кастомизация</span>
+            <span class="settings-action__sub">Градиенты и обои</span>
+          </span>
+          <span class="settings-action__chevron">></span>
+        </button>
+        <div class="customization-panel" id="settings-customization-panel" hidden>
+          <label class="settings-toggle">
+            <span class="settings-toggle__body">
+              <span class="settings-toggle__title">Градиенты</span>
+              <span class="settings-toggle__sub" id="settings-customization-scope">Verified: на всех устройствах, остальные: только здесь</span>
+            </span>
+            <input id="settings-gradients-enabled" type="checkbox" />
+            <span class="settings-toggle__switch"></span>
+          </label>
+
+          <div class="gradient-colors">
+            <label class="color-pick">
+              <span class="color-pick__swatch" id="settings-gradient-color-1-preview"></span>
+              <span>Цвет 1</span>
+              <input id="settings-gradient-color-1" type="color" value="#4E7ADF" />
+            </label>
+            <label class="color-pick">
+              <span class="color-pick__swatch" id="settings-gradient-color-2-preview"></span>
+              <span>Цвет 2</span>
+              <input id="settings-gradient-color-2" type="color" value="#144CCC" />
+            </label>
+          </div>
+          <div class="gradient-preview" id="settings-gradient-preview">
+            <svg class="gradient-preview__bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <defs>
+                <filter id="settings-vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter>
+                <filter id="settings-vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter>
+              </defs>
+              <g filter="url(#settings-vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="var(--preview-gradient-1, #4E7ADF)"/></g>
+              <g filter="url(#settings-vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="var(--preview-gradient-2, #144CCC)"/></g>
+            </svg>
+          </div>
+          <button class="settings-save" id="settings-gradient-save" type="button">Сохранить градиент</button>
+
+          <div class="settings-divider"></div>
+
+          <div class="wallpaper-control">
+            <div class="wallpaper-preview" id="settings-wallpaper-preview"></div>
+            <div class="wallpaper-control__actions">
+              <label class="wallpaper-btn" id="settings-wallpaper-action" for="settings-wallpaper-input">Добавить обои</label>
+            </div>
+            <input id="settings-wallpaper-input" type="file" accept="image/*" hidden />
+          </div>
+          <button class="settings-save" id="settings-wallpaper-save" type="button">Сохранить обои</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
   <div id="view-user-profile" class="view">
     <div class="profile-wrap" id="user-profile-wrap">
 
@@ -142,7 +247,7 @@
         <div class="profile-card__banner">
           <img class="profile-card__banner-img" id="up-banner-img" src="" alt="" />
           <div class="profile-card__banner-placeholder" id="up-banner-placeholder"></div>
-          <button class="btn-banner-settings" id="btn-user-profile-back" title="Назад">
+          <button class="btn-banner-settings" id="btn-user-profile-back" title="РќР°Р·Р°Рґ">
             <img src="/appimg/close.svg" alt="back" style="filter:brightness(0) invert(1);width:14px;height:14px" />
           </button>
         </div>
@@ -154,7 +259,7 @@
         <div class="profile-card__body">
           <div class="profile-card__info">
             <div class="profile-card__namerow">
-              <span class="profile-card__name" id="up-name">—</span>
+              <span class="profile-card__name" id="up-name">вЂ”</span>
               <img class="profile-card__verified" id="up-verified-badge" src="/appimg/verided.svg" alt="verified" style="display:none" />
             </div>
             <span class="profile-card__username" id="up-username"></span>
@@ -167,7 +272,6 @@
     </div>
   </div>
 
-  <!-- ══ Confirm logout ════════════════════════ -->
   <div class="confirm-overlay" id="confirm-logout-overlay" hidden>
     <div class="confirm-box">
       <span class="confirm-box__title">Выйти?</span>
@@ -177,7 +281,15 @@
     </div>
   </div>
 
-  <!-- ══ Thread panel ══════════════════════════ -->
+  <div class="confirm-overlay" id="account-auth-overlay" hidden>
+    <div class="confirm-box account-auth-box">
+      <span class="confirm-box__title">Добавить аккаунт</span>
+      <span class="confirm-box__sub">Текущий аккаунт останется в списке. После этого откроется авторизация, где можно будет войти в другой Telegram-аккаунт.</span>
+      <button class="confirm-box__btn confirm-box__btn--yes" id="account-auth-continue">Продолжить</button>
+      <button class="confirm-box__btn confirm-box__btn--no" id="account-auth-cancel">Отмена</button>
+    </div>
+  </div>
+
   <div class="thread-overlay" id="thread-overlay" hidden>
     <div class="thread-wrap">
       <div class="thread-header">
@@ -195,20 +307,23 @@
       </div>
       <div class="thread-panel__compose">
         <img class="avatar" id="thread-compose-avatar" src="/appimg/default_avatar.png" alt="" />
-        <textarea class="compose__input thread-compose__input" id="thread-compose-input" rows="1" placeholder="Напишите ответ..."></textarea>
-        <button class="thread-compose__btn" id="thread-btn-post">↑</button>
+        <div class="thread-compose__field" id="thread-compose-field">
+          <textarea class="thread-compose__input" id="thread-compose-input" rows="1"></textarea>
+          <span class="thread-compose__placeholder">Напишите ответ...</span>
+        </div>
+        <button class="thread-compose__btn" id="thread-btn-post" aria-label="Отправить">
+          <img src="/appimg/up.svg" alt="" />
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- ══ Emoji panel ═════════════════════════ -->
   <div id="emoji-panel" class="emoji-panel">
     <div class="emoji-panel__grid" id="emoji-panel-grid"></div>
   </div>
 
-  <!-- ══ Lightbox ════════════════════════════ -->
   <div id="lightbox" class="lightbox" style="display:none">
-    <button class="lightbox__close" id="lightbox-close" title="Закрыть">
+    <button class="lightbox__close" id="lightbox-close" title="Р—Р°РєСЂС‹С‚СЊ">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
     <img class="lightbox__img" id="lightbox-img" src="" alt="" />
@@ -258,38 +373,49 @@
     </div>
   </div>
 
-  <!-- ══ Post context menu ════════════════════ -->
   <div id="post-ctx-menu" class="post-ctx-menu">
+    <button class="post-ctx-menu__item" id="post-ctx-reply">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+      Ответить постом
+    </button>
     <button class="post-ctx-menu__item" id="post-ctx-copy-link">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
       Копировать ссылку
     </button>
   </div>
 
-  <!-- ══ Shared ══════════════════════════════ -->
-  <nav class="bottom-nav">
-    <button class="nav-btn active" id="nav-home" title="Главная">
-      <img class="nav-icon" src="/appimg/home.svg" alt="home" />
+  <div class="floating-nav">
+    <button class="btn-profile-settings" id="btn-profile-settings" title="Настройки">
+      <img src="/appimg/settings.svg" alt="settings" />
     </button>
-    <button class="nav-btn" id="nav-profile" title="Профиль">
-      <img class="nav-icon" src="/appimg/profile.svg" alt="profile" />
-    </button>
-  </nav>
 
-  <button class="btn-scroll-top" id="btn-scroll-top">
-    <img src="/appimg/up.svg" alt="up" />
-  </button>
+    <nav class="bottom-nav">
+      <span class="bottom-nav__indicator" id="bottom-nav-indicator"></span>
+      <button class="nav-btn active" id="nav-home" title="Главная">
+        <img class="nav-icon" src="/appimg/home.svg" alt="home" />
+      </button>
+      <button class="nav-btn" id="nav-profile" title="Профиль">
+        <img class="nav-icon" src="/appimg/profile.svg" alt="profile" />
+      </button>
+    </nav>
+
+    <button class="btn-scroll-top" id="btn-scroll-top">
+      <img src="/appimg/up.svg" alt="up" />
+    </button>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js"></script>
   <script src="js/api.js"></script>
-  <script src="js/tgs.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/posts.js"></script>
-  <script src="js/feed.js"></script>
-  <script src="js/profile.js"></script>
-  <script src="js/thread.js"></script>
-  <script src="js/user-profile.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/tgs.js?v=reactions-batch-20260621-4"></script>
+  <script src="js/storage.js?v=cache-sync-20260625-1"></script>
+  <script src="js/notifications.js?v=mentions-20260625-2"></script>
+  <script src="js/posts.js?v=post-links-20260625-1"></script>
+  <script src="js/feed.js?v=reply-posts-20260625-1"></script>
+  <script src="js/profile.js?v=reply-posts-20260625-1"></script>
+  <script src="js/thread.js?v=comment-notify-20260625-1"></script>
+  <script src="js/user-profile.js?v=profile-settings-island-20260621-2"></script>
+  <script src="js/settings.js?v=mobile-20260621-3"></script>
+  <script src="js/app.js?v=sse-delete-20260625-1"></script>
 </body>
 </html>

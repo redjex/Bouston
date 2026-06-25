@@ -1,6 +1,6 @@
-'use strict';
+﻿'use strict';
 
-/* ── Lightbox ───────────────────────────────── */
+/* в”Ђв”Ђ Lightbox в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 (function () {
   const lb             = document.getElementById('lightbox');
   const lbImg          = document.getElementById('lightbox-img');
@@ -105,6 +105,7 @@
     _isVideo = !!isVideo;
     if (_isVideo) {
       lbVideo.src = src;
+      lbVideo.preload = 'auto';
       lbVideo.style.display = '';
       lbImg.style.display = 'none';
       lbToolbarPhoto.style.display = 'none';
@@ -175,9 +176,9 @@
     const items = [];
     postEl.querySelectorAll('.post__images .post__image, .post__images .post__video').forEach(el => {
       const isVideo = el.classList.contains('post__video') || el.classList.contains('vplayer');
-      items.push({ src: isVideo ? el.dataset.src : el.src, isVideo });
+      items.push({ src: el.dataset.fullSrc || el.dataset.src || el.src, isVideo });
     });
-    const clickedSrc = clickedEl.dataset.src || clickedEl.src;
+    const clickedSrc = clickedEl.dataset.fullSrc || clickedEl.dataset.src || clickedEl.src;
     const index = items.findIndex(it => it.src === clickedSrc);
     return { items, index: index === -1 ? 0 : index };
   }
@@ -187,13 +188,13 @@
     const vidWrap = e.target.closest('.post__video');
     if (vidWrap) {
       const { items, index } = collectPostItems(vidWrap);
-      openLightbox(vidWrap.dataset.src, true, items, index);
+      openLightbox(vidWrap.dataset.fullSrc || vidWrap.dataset.src, true, items, index);
       return;
     }
     const img = e.target.closest('.post__image:not(.post__video)');
     if (img) {
       const { items, index } = collectPostItems(img);
-      openLightbox(img.src, false, items, index);
+      openLightbox(img.dataset.fullSrc || img.src, false, items, index);
       return;
     }
     if (lb.style.display !== 'none' && e.target === lb) closeLightbox();
@@ -236,7 +237,7 @@
   }, { passive: false });
 })();
 
-/* ── Emoji insert panel ─────────────────────── */
+/* в”Ђв”Ђ Emoji insert panel в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 (function () {
   const panel   = document.getElementById('emoji-panel');
   const grid    = document.getElementById('emoji-panel-grid');
@@ -301,7 +302,7 @@
     wrap.dataset.emoji = emoji;
     const player = createTgsPlayer(file, 26, true, true);
     wrap.appendChild(player);
-    const after = document.createTextNode('​');
+    const after = document.createTextNode('вЂ‹');
 
     const sel = window.getSelection();
     let inserted = false;
@@ -360,23 +361,24 @@
   });
 })();
 
-/* ── Video player ───────────────────────────── */
+/* в”Ђв”Ђ Video player в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function fmtTime(s) {
   if (!isFinite(s)) return '0:00';
   const m = Math.floor(s / 60), ss = Math.floor(s % 60);
   return `${m}:${String(ss).padStart(2, '0')}`;
 }
 
-function buildVideoPlayer(src, extraClass = '') {
+function buildVideoPlayer(src, extraClass = '', fullSrc = src) {
   const wrap = document.createElement('div');
   wrap.className = 'vplayer' + (extraClass ? ' ' + extraClass : '');
   wrap.dataset.src = src;
+  wrap.dataset.fullSrc = fullSrc || src;
 
   const vid = document.createElement('video');
   vid.className   = 'vplayer__video';
   vid.src         = src;
+  vid.preload     = 'metadata';
   vid.muted       = true;
-  vid.autoplay    = true;
   vid.loop        = true;
   vid.playsInline = true;
   wrap.appendChild(vid);
@@ -387,18 +389,18 @@ function buildVideoPlayer(src, extraClass = '') {
 function mountVideoPlayers(container) {
   container.querySelectorAll('.post__video-wrap[data-src]').forEach(wrap => {
     const src = wrap.dataset.src;
-    const player = buildVideoPlayer(src, 'post__video');
+    const player = buildVideoPlayer(src, 'post__video', wrap.dataset.fullSrc || src);
     wrap.replaceWith(player);
   });
 }
 
-/* ── Compose helpers ────────────────────────── */
+/* в”Ђв”Ђ Compose helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function getComposeText(id) {
   const el = document.getElementById(id);
   if (!el) return '';
   let text = '';
   el.childNodes.forEach(node => {
-    if (node.nodeType === Node.TEXT_NODE) text += node.textContent.replace(/​/g, '');
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent.replace(/вЂ‹/g, '');
     else if (node.dataset?.emoji) text += node.dataset.emoji;
     else if (node.nodeName === 'BR') text += '\n';
     else text += node.textContent;
@@ -416,19 +418,115 @@ function watchComposeEmpty(id) {
   if (!el) return;
   el.addEventListener('input', () => {
     const isEmpty = el.innerHTML === '' || el.innerHTML === '<br>' ||
-      el.textContent.replace(/​/g, '').trim() === '' && !el.querySelector('span[data-emoji]');
+      el.textContent.replace(/вЂ‹/g, '').trim() === '' && !el.querySelector('span[data-emoji]');
     if (isEmpty) el.innerHTML = '';
   });
 }
 
-/* ── Compose photo ──────────────────────────── */
+/* в”Ђв”Ђ Compose photo в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 const _composeImages = { feed: [], profile: [] };
+const _composeReplyTargets = { feed: null, profile: null };
 
 function getComposeImages(ns) { return _composeImages[ns] || []; }
 function clearComposeImages(ns) {
   _composeImages[ns] = [];
   const el = document.getElementById(`${ns}-compose-previews`);
   if (el) el.innerHTML = '';
+}
+
+function getComposeReplyTargetId(ns) {
+  return _composeReplyTargets[ns]?.id || null;
+}
+
+function makeReplySnippet(post) {
+  const text = (post?.text || '').replace(/\s+/g, ' ').trim();
+  if (text) return text.length > 96 ? text.slice(0, 93) + '...' : text;
+  if (post?.hasMedia || (post?.images && post.images.length)) return '\u041c\u0435\u0434\u0438\u0430';
+  return '\u041f\u043e\u0441\u0442';
+}
+
+function makeReplyAuthorName(post) {
+  const author = post?.author || {};
+  return author.displayName || author.profileUsername || author.tgUsername || '\u041f\u043e\u0441\u0442';
+}
+
+let _replyDockEl = null;
+
+function ensureReplyDock() {
+  if (_replyDockEl) return _replyDockEl;
+  _replyDockEl = document.createElement('div');
+  _replyDockEl.className = 'reply-dock';
+  document.body.appendChild(_replyDockEl);
+  return _replyDockEl;
+}
+
+function renderReplyDock(ns, post) {
+  const dock = ensureReplyDock();
+  if (!post) {
+    dock.classList.remove('reply-dock--visible');
+    dock.innerHTML = '';
+    return;
+  }
+  dock.innerHTML = `
+    <button class="reply-dock__body" type="button">
+      <span class="reply-dock__label">\u041e\u0442\u0432\u0435\u0447\u0430\u0435\u043c \u043d\u0430 \u043f\u043e\u0441\u0442</span>
+      <span class="reply-dock__author">${escapeHtml(makeReplyAuthorName(post))}</span>
+      <span class="reply-dock__text">${escapeHtml(makeReplySnippet(post))}</span>
+    </button>
+    <button class="reply-dock__close" type="button" aria-label="Close">&times;</button>
+  `;
+  dock.querySelector('.reply-dock__body').addEventListener('click', () => {
+    const input = document.getElementById(`${ns}-compose-input`);
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus();
+  });
+  dock.querySelector('.reply-dock__close').addEventListener('click', () => clearComposeReplyTarget(ns));
+  dock.classList.add('reply-dock--visible');
+}
+
+function renderComposeReplyTarget(ns) {
+  const compose = document.getElementById(`${ns}-compose-input`)?.closest('.compose');
+  if (!compose) return;
+  compose.querySelector('.compose-reply')?.remove();
+
+  const post = _composeReplyTargets[ns];
+  compose.classList.toggle('compose--replying', !!post);
+  renderReplyDock(ns, null);
+  if (!post) return;
+
+  const box = document.createElement('div');
+  box.className = 'compose-reply';
+  box.innerHTML = `
+    <div class="compose-reply__bar"></div>
+    <div class="compose-reply__body">
+      <div class="compose-reply__label">\u041e\u0442\u0432\u0435\u0447\u0430\u0435\u043c \u043d\u0430 \u043f\u043e\u0441\u0442</div>
+      <div class="compose-reply__author">${escapeHtml(makeReplyAuthorName(post))}</div>
+      <div class="compose-reply__text">${escapeHtml(makeReplySnippet(post))}</div>
+    </div>
+    <button class="compose-reply__close" type="button" aria-label="Close">&times;</button>
+  `;
+  box.querySelector('.compose-reply__close').addEventListener('click', () => clearComposeReplyTarget(ns));
+  compose.insertBefore(box, compose.firstElementChild);
+}
+
+function clearComposeReplyTarget(ns) {
+  _composeReplyTargets[ns] = null;
+  renderComposeReplyTarget(ns);
+}
+
+function setComposeReplyTarget(ns, postId) {
+  const post = getPostById(Number(postId));
+  if (!post) return;
+  _composeReplyTargets[ns] = post;
+  renderComposeReplyTarget(ns);
+  const input = document.getElementById(`${ns}-compose-input`);
+  input?.focus();
+  input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function getComposeScopeFromPostEl(postEl) {
+  if (postEl.closest('#view-profile, #profile-posts-container')) return 'profile';
+  return 'feed';
 }
 
 function initComposePhoto(ns) {
@@ -459,7 +557,7 @@ function initComposePhoto(ns) {
 
       const rm = document.createElement('button');
       rm.className = 'compose__preview-remove';
-      rm.textContent = '×';
+      rm.textContent = '\u00d7';
       rm.addEventListener('click', () => {
         const idx = _composeImages[ns].findIndex(m => m.src === dataUrl);
         if (idx !== -1) _composeImages[ns].splice(idx, 1);
@@ -512,15 +610,18 @@ initComposePhoto('profile');
 watchComposeEmpty('feed-compose-input');
 watchComposeEmpty('profile-compose-input');
 
-/* ── Post context menu ──────────────────────── */
+/* в”Ђв”Ђ Post context menu в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 (function () {
   const menu    = document.getElementById('post-ctx-menu');
   const btnCopy = document.getElementById('post-ctx-copy-link');
+  const btnReply = document.getElementById('post-ctx-reply');
   let _postId   = null;
+  let _scope    = 'feed';
 
-  function openMenu(x, y, postId) {
+  function openMenu(x, y, postId, scope) {
     _postId = postId;
-    const mw = 200, mh = 60;
+    _scope = scope || 'feed';
+    const mw = 220, mh = 108;
     const px = x + mw > window.innerWidth  ? x - mw : x;
     const py = y + mh > window.innerHeight ? y - mh : y;
     menu.style.left = px + 'px';
@@ -537,7 +638,7 @@ watchComposeEmpty('profile-compose-input');
     const postEl = e.target.closest('.post[data-post-id]');
     if (!postEl) { closeMenu(); return; }
     e.preventDefault();
-    openMenu(e.clientX, e.clientY, postEl.dataset.postId);
+    openMenu(e.clientX, e.clientY, postEl.dataset.postId, getComposeScopeFromPostEl(postEl));
   });
 
   document.addEventListener('mousedown', e => { if (!menu.contains(e.target)) closeMenu(); });
@@ -549,10 +650,72 @@ watchComposeEmpty('profile-compose-input');
     navigator.clipboard.writeText(url).catch(() => {});
     closeMenu();
   });
+
+  btnReply?.addEventListener('click', () => {
+    if (!_postId) return;
+    setComposeReplyTarget(_scope, _postId);
+    closeMenu();
+  });
 })();
 
-/* ── Spam toast ─────────────────────────────── */
+(function () {
+  let active = null;
+
+  function resetActive() {
+    if (!active) return;
+    active.el.classList.remove('post--swiping', 'post--swipe-armed');
+    active.el.style.transform = '';
+    active = null;
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || !window.matchMedia('(max-width: 640px)').matches) return;
+    if (e.target.closest('button, a, input, textarea, [contenteditable], .post__images, .vplayer')) return;
+    const el = e.target.closest('.post[data-post-id]');
+    if (!el) return;
+    active = { el, id: el.dataset.postId, scope: getComposeScopeFromPostEl(el), x: e.clientX, y: e.clientY, dx: 0 };
+  }, { passive: true });
+
+  document.addEventListener('pointermove', e => {
+    if (!active) return;
+    const dx = e.clientX - active.x;
+    const dy = e.clientY - active.y;
+    if (Math.abs(dy) > 42 && Math.abs(dy) > Math.abs(dx)) { resetActive(); return; }
+    if (dx >= 0) return;
+    active.dx = dx;
+    const offset = Math.max(-54, dx * 0.42);
+    active.el.classList.add('post--swiping');
+    active.el.classList.toggle('post--swipe-armed', Math.abs(dx) > 72);
+    active.el.style.transform = `translateX(${offset}px)`;
+  }, { passive: true });
+
+  document.addEventListener('pointerup', () => {
+    if (!active) return;
+    const picked = Math.abs(active.dx) > 72;
+    const { el, id, scope } = active;
+    resetActive();
+    if (!picked) return;
+    setComposeReplyTarget(scope, id);
+    el.classList.add('post--reply-picked');
+    setTimeout(() => el.classList.remove('post--reply-picked'), 650);
+  }, { passive: true });
+
+  document.addEventListener('pointercancel', resetActive, { passive: true });
+})();
+
+/* в”Ђв”Ђ Spam toast в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 let _toastTimer = null;
+
+function restorePostButton(btnEl, text = null) {
+  if (!btnEl) return;
+  const idleText = text || btnEl.dataset.idleText || btnEl.dataset.origText || '\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u044c';
+  btnEl.textContent = idleText;
+  btnEl.disabled = false;
+  btnEl.classList.remove('btn-post--loading');
+  delete btnEl.dataset.idleText;
+  delete btnEl.dataset.origText;
+  delete btnEl.dataset.cooldownTimer;
+}
 
 function showPostError(message, btnEl) {
   let toast = document.getElementById('post-error-toast');
@@ -568,13 +731,35 @@ function showPostError(message, btnEl) {
   _toastTimer = setTimeout(() => toast.classList.remove('post-error-toast--visible'), 3500);
 
   if (!btnEl) return;
-  const match = message.match(/(\d+)\s*сек/);
+  const cooldownMatch = String(message).match(/(\d+)\s*(?:\u0441\u0435\u043a|\u0441\b|sec|seconds?)/i);
+  if (!cooldownMatch) return;
+  let cooldownSecs = parseInt(cooldownMatch[1]);
+  const restoreText = btnEl.dataset.idleText || btnEl.dataset.origText || '\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u044c';
+  if (btnEl.dataset.cooldownTimer) clearInterval(Number(btnEl.dataset.cooldownTimer));
+  btnEl.dataset.origText = restoreText;
+  btnEl.classList.remove('btn-post--loading');
+  btnEl.disabled = true;
+  btnEl.textContent = `${cooldownSecs}\u0441`;
+  const cooldownTimer = setInterval(() => {
+    cooldownSecs--;
+    if (cooldownSecs <= 0) {
+      clearInterval(cooldownTimer);
+      restorePostButton(btnEl, restoreText);
+    } else {
+      btnEl.textContent = `${cooldownSecs}\u0441`;
+    }
+  }, 1000);
+  btnEl.dataset.cooldownTimer = String(cooldownTimer);
+  return;
+
+  if (!btnEl) return;
+  const match = message.match(/(\d+)\s*СЃРµРє/);
   if (!match) return;
   let secs = parseInt(match[1]);
   const origText = btnEl.dataset.origText || btnEl.textContent;
   btnEl.dataset.origText = origText;
   btnEl.disabled = true;
-  btnEl.textContent = `${secs}с`;
+  btnEl.textContent = `${secs}СЃ`;
   const iv = setInterval(() => {
     secs--;
     if (secs <= 0) {
@@ -582,12 +767,12 @@ function showPostError(message, btnEl) {
       btnEl.disabled = false;
       btnEl.textContent = origText;
     } else {
-      btnEl.textContent = `${secs}с`;
+      btnEl.textContent = `${secs}СЃ`;
     }
   }, 1000);
 }
 
-/* ── Utils ─────────────────────────────────── */
+/* в”Ђв”Ђ Utils в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
@@ -601,7 +786,14 @@ function formatPostTime(ts) {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-const MONTHS_RU = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const MONTHS_RU = [
+  '\u044f\u043d\u0432\u0430\u0440\u044f', '\u0444\u0435\u0432\u0440\u0430\u043b\u044f',
+  '\u043c\u0430\u0440\u0442\u0430', '\u0430\u043f\u0440\u0435\u043b\u044f',
+  '\u043c\u0430\u044f', '\u0438\u044e\u043d\u044f', '\u0438\u044e\u043b\u044f',
+  '\u0430\u0432\u0433\u0443\u0441\u0442\u0430', '\u0441\u0435\u043d\u0442\u044f\u0431\u0440\u044f',
+  '\u043e\u043a\u0442\u044f\u0431\u0440\u044f', '\u043d\u043e\u044f\u0431\u0440\u044f',
+  '\u0434\u0435\u043a\u0430\u0431\u0440\u044f',
+];
 
 function getDateKey(ts) {
   const d = new Date(ts);
@@ -610,9 +802,9 @@ function getDateKey(ts) {
 
 function formatDateLabel(ts) {
   const d = new Date(ts), now = new Date();
-  if (d.toDateString() === now.toDateString()) return 'Сегодня';
+  if (d.toDateString() === now.toDateString()) return '\u0421\u0435\u0433\u043e\u0434\u043d\u044f';
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Вчера';
+  if (d.toDateString() === yesterday.toDateString()) return '\u0412\u0447\u0435\u0440\u0430';
   return `${d.getDate()} ${MONTHS_RU[d.getMonth()]}`;
 }
 
@@ -624,11 +816,12 @@ function buildDateSeparator(ts) {
 }
 
 function isHeartOnly(text) {
-  return /^[\s]*[❤️🤍💕💗💓💞💘💝🖤🤎💜💙💚💛🧡♥❤️]+[\s]*$/u.test(text.trim());
+  return /^[\s]*(?:[\u2764\u2665]|\uFE0F|\uD83E\uDD0D|\uD83E\uDD0E|\uD83E\uDDE1|\uD83D\uDC95|\uD83D\uDC97|\uD83D\uDC93|\uD83D\uDC9E|\uD83D\uDC98|\uD83D\uDC9D|\uD83D\uDDA4|\uD83D\uDC9C|\uD83D\uDC99|\uD83D\uDC9A|\uD83D\uDC9B)+[\s]*$/u.test(text.trim());
 }
 
 let _emojiRegex = null;
 let _emojiMap   = null;
+const HEART_EMOJI = '\u2764\uFE0F';
 
 async function getEmojiRegex() {
   if (_emojiRegex) return { regex: _emojiRegex, map: _emojiMap };
@@ -653,7 +846,35 @@ function buildPostTextEl(text) {
     return p;
   }
 
-  p.textContent = text;
+  function appendTextWithLinks(target, value) {
+    const urlRe = /((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
+    let last = 0, match;
+    while ((match = urlRe.exec(value)) !== null) {
+      const raw = match[0];
+      const clean = raw.replace(/[),.!?;:]+$/g, '');
+      const trailing = raw.slice(clean.length);
+      if (match.index > last) target.appendChild(document.createTextNode(value.slice(last, match.index)));
+      const a = document.createElement('a');
+      a.className = 'post__link';
+      a.href = clean.startsWith('www.') ? `https://${clean}` : clean;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = clean;
+      target.appendChild(a);
+      if (trailing) target.appendChild(document.createTextNode(trailing));
+      last = match.index + raw.length;
+    }
+    if (last < value.length) target.appendChild(document.createTextNode(value.slice(last)));
+  }
+
+  // Р Р°Р·Р±РёРІР°РµРј С‚РµРєСЃС‚ РїРѕ РїРµСЂРµРЅРѕСЃР°Рј СЃС‚СЂРѕРє Рё РґРѕР±Р°РІР»СЏРµРј <br>
+  const lines = text.split('\n');
+  lines.forEach((line, index) => {
+    appendTextWithLinks(p, line);
+    if (index < lines.length - 1) {
+      p.appendChild(document.createElement('br'));
+    }
+  });
 
   getEmojiRegex().then(result => {
     if (!result) return;
@@ -671,9 +892,10 @@ function buildPostTextEl(text) {
           if (m.index > last) frag.appendChild(document.createTextNode(val.slice(last, m.index)));
           const file = emojiMap.get(m[0]);
           if (file) {
-            const player = createTgsPlayer(file, 20, true, false);
+            const player = createTgsPlayer(file, 20, false, false, false);
             player.classList.add('post__text-tgs');
             frag.appendChild(player);
+            registerBatchedTgsPlayer(p, player);
           } else {
             frag.appendChild(document.createTextNode(m[0]));
           }
@@ -681,7 +903,7 @@ function buildPostTextEl(text) {
         }
         if (last < val.length) frag.appendChild(document.createTextNode(val.slice(last)));
         node.replaceWith(frag);
-      } else {
+      } else if (node.nodeName !== 'A') {
         Array.from(node.childNodes).forEach(processNode);
       }
     }
@@ -691,13 +913,16 @@ function buildPostTextEl(text) {
   return p;
 }
 
-/* ── Server posts cache ─────────────────────── */
+/* в”Ђв”Ђ Server posts cache в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 const _serverPostsMap = new Map();
+const _editingPostIds = new Set();
 
 function registerServerPost(post) {
   if (!post.reactions)   post.reactions   = {};
   if (!post.myReactions) post.myReactions = [];
   _serverPostsMap.set(post.id, post);
+
+  // РџСЂРѕРІРµСЂСЏРµРј СѓРїРѕРјРёРЅР°РЅРёРµ РїСЂРё СЂРµРіРёСЃС‚СЂР°С†РёРё РїРѕСЃС‚Р°
 }
 
 function getPostById(id) {
@@ -705,12 +930,13 @@ function getPostById(id) {
   return local || _serverPostsMap.get(id) || null;
 }
 
-/* ── Menu ───────────────────────────────────── */
+/* в”Ђв”Ђ Menu в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 let _openMenuId        = null;
 let _menuScrollCleanup = null;
 
 function closeAllMenus() {
   document.querySelectorAll('.post__menu').forEach(m => m.remove());
+  document.querySelectorAll('.post--menu-open').forEach(p => p.classList.remove('post--menu-open'));
   _openMenuId = null;
   if (_menuScrollCleanup) { _menuScrollCleanup(); _menuScrollCleanup = null; }
 }
@@ -719,12 +945,17 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   closeAllMenus();
   if (!getPostById(id)) return;
 
+  postEl.classList.add('post--menu-open');
+
   const menu = document.createElement('div');
   menu.className = 'post__menu';
+  let menuTrackRaf = null;
 
   function updatePos() {
     const r = postEl.getBoundingClientRect();
-    menu.style.left = (r.right + 8) + 'px';
+    const menuWidth = menu.offsetWidth || 55;
+    const left = Math.min(r.right + 8, window.innerWidth - menuWidth - 8);
+    menu.style.left = Math.max(8, left) + 'px';
     menu.style.top  = r.top + 'px';
   }
   updatePos();
@@ -733,6 +964,7 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   _menuScrollCleanup = () => {
     scrollContainer.removeEventListener('scroll', updatePos);
     window.removeEventListener('resize', updatePos);
+    if (menuTrackRaf) cancelAnimationFrame(menuTrackRaf);
   };
 
   menuItems.forEach(({ src, action }) => {
@@ -744,30 +976,47 @@ function openPostMenu(id, postEl, scrollContainer, menuItems) {
   });
 
   document.body.appendChild(menu);
+  const trackUntil = performance.now() + 280;
+  function trackMenuPosition() {
+    updatePos();
+    if (performance.now() < trackUntil) {
+      menuTrackRaf = requestAnimationFrame(trackMenuPosition);
+    }
+  }
+  menuTrackRaf = requestAnimationFrame(trackMenuPosition);
   _openMenuId = id;
 }
 
-/* ── Post actions ───────────────────────────── */
+/* в”Ђв”Ђ Post actions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function startEditPost(id, postEl, onDone) {
+  const existingEditor = postEl.querySelector('.post__edit-area');
+  if (_editingPostIds.has(id) || postEl.classList.contains('post--editing') || existingEditor) {
+    existingEditor?.focus();
+    return;
+  }
+
   const isServer = _serverPostsMap.has(id);
   const post = isServer ? _serverPostsMap.get(id) : getPosts().find(p => p.id === id);
   if (!post) return;
+  _editingPostIds.add(id);
+  postEl.classList.add('post--editing');
 
   const textWrap = postEl.querySelector('.post__text-wrap') || postEl.querySelector('.post__text');
+  const originalText = post.text || '';
   const textarea = document.createElement('textarea');
   textarea.className = 'post__edit-area';
-  textarea.value     = post.text;
+  textarea.value     = originalText;
 
   const actions   = document.createElement('div');
   actions.className = 'post__edit-actions';
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className   = 'post__edit-btn post__edit-btn--cancel';
-  cancelBtn.textContent = 'Отмена';
+  cancelBtn.textContent = 'РћС‚РјРµРЅР°';
 
   const saveBtn = document.createElement('button');
   saveBtn.className   = 'post__edit-btn post__edit-btn--save';
-  saveBtn.textContent = 'Сохранить';
+  saveBtn.textContent = 'РЎРѕС…СЂР°РЅРёС‚СЊ';
 
   actions.append(cancelBtn, saveBtn);
   if (textWrap) textWrap.replaceWith(textarea);
@@ -782,29 +1031,81 @@ function startEditPost(id, postEl, onDone) {
   textarea.focus();
   textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
-  cancelBtn.addEventListener('click', onDone);
-  saveBtn.addEventListener('click', async () => {
+  const closeEditor = text => {
+    postEl.querySelectorAll('.post__edit-actions').forEach(el => el.remove());
+    postEl.querySelectorAll('.post__edit-area').forEach((el, index) => {
+      if (index === 0) el.replaceWith(buildPostTextEl(text));
+      else el.remove();
+    });
+    if (!postEl.querySelector('.post__text')) {
+      postEl.querySelector('.post__header')?.after(buildPostTextEl(text));
+    }
+    postEl.classList.remove('post--editing');
+    _editingPostIds.delete(id);
+  };
+  const failSave = message => {
+    saveBtn.disabled = false;
+    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+    delete saveBtn.dataset.idleText;
+    showPostError(message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚', saveBtn);
+  };
+
+  cancelBtn.addEventListener('click', e => {
+    e.preventDefault();
+    closeEditor(originalText);
+    onDone();
+  });
+  saveBtn.addEventListener('click', async e => {
+    e.preventDefault();
     const newText = textarea.value.trim();
-    if (!newText) return;
+    if (!newText) { failSave('РўРµРєСЃС‚ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј'); return; }
+    saveBtn.dataset.idleText = saveBtn.textContent;
+    saveBtn.textContent = 'РЎРѕС…СЂР°РЅРµРЅРёРµ...';
     saveBtn.disabled = true;
 
     if (isServer) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
       try {
         const res = await apiFetch(`${API}/posts/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: newText }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
         if (res.ok) {
           const updated = await res.json();
-          _serverPostsMap.set(id, { ..._serverPostsMap.get(id), ...updated });
+          const nextPost = { ..._serverPostsMap.get(id), ...updated };
+          _serverPostsMap.set(id, nextPost);
+          mergeFeedPostsCache([nextPost]);
+          if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+        } else {
+          let message = 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚';
+          try {
+            const data = await res.json();
+            if (data?.detail) message = data.detail;
+          } catch {}
+          failSave(message);
+          return;
         }
-      } catch {}
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err.name === 'AbortError') {
+          failSave('РЎРµСЂРІРµСЂ РЅРµ РѕС‚РІРµС‚РёР», РїРѕРїСЂРѕР±СѓР№ РµС‰С‘ СЂР°Р·');
+          return;
+        }
+        failSave('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј');
+        return;
+      }
     } else {
       const posts = getPosts();
       const p = posts.find(p => p.id === id);
       if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
     }
+    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+    delete saveBtn.dataset.idleText;
+    closeEditor(isServer ? (_serverPostsMap.get(id)?.text || newText) : newText);
     onDone();
   });
 }
@@ -812,29 +1113,68 @@ function startEditPost(id, postEl, onDone) {
 function deletePost(id, onDone) {
   if (_serverPostsMap.has(id)) {
     apiFetch(`${API}/posts/${id}`, { method: 'DELETE' }).catch(() => {});
-    _serverPostsMap.delete(id);
   } else {
     savePosts(getPosts().filter(p => p.id !== id));
   }
 
-  const el = document.querySelector(`.post[data-post-id="${id}"]`);
-  if (el) {
-    const prev = el.previousElementSibling;
-    const next = el.nextElementSibling;
-    if (prev?.classList.contains('date-separator') &&
-        (!next || next.classList.contains('date-separator') || next.classList.contains('feed-sentinel'))) {
-      prev.remove();
-    }
-    el.remove();
-    return;
-  }
+  handleDeletedPost(id);
   onDone();
+}
+
+function removeCachedCommentsForPost(id) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMMENTS_KEY)) || {};
+    delete all[id];
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function removePostElWithSeparator(postEl) {
+  const container = postEl.parentElement;
+  const prev = postEl.previousElementSibling;
+  const next = postEl.nextElementSibling;
+  postEl.remove();
+
+  if (prev?.classList.contains('date-separator') &&
+      (!next || next.classList.contains('date-separator') || next.classList.contains('feed-sentinel'))) {
+    prev.remove();
+  }
+
+  if (container?.id === 'posts-container' && typeof normalizeFeedDateSeparators === 'function') {
+    normalizeFeedDateSeparators(container);
+  }
+}
+
+function handleDeletedPost(id) {
+  const postId = Number(id);
+  if (!postId) return;
+
+  removePostFromPostsCaches(postId);
+  savePosts(getPosts().filter(p => Number(p.id) !== postId));
+  removeCachedCommentsForPost(postId);
+  _serverPostsMap.delete(postId);
+
+  document.querySelectorAll(`.post[data-post-id="${postId}"]`).forEach(removePostElWithSeparator);
+
+  if (typeof _threadPostId !== 'undefined' && Number(_threadPostId) === postId) {
+    closeThread?.();
+  }
 }
 
 function pinPost(id, onDone) {
   if (_serverPostsMap.has(id)) {
     apiFetch(`${API}/posts/${id}/pin`, { method: 'PUT' })
-      .then(r => r.json()).then(() => onDone()).catch(() => onDone());
+      .then(r => r.ok ? r.json() : null)
+      .then(updated => {
+        if (updated) {
+          const nextPost = { ..._serverPostsMap.get(id), ...updated };
+          _serverPostsMap.set(id, nextPost);
+          mergeFeedPostsCache([nextPost]);
+          if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+        }
+        onDone();
+      })
+      .catch(() => onDone());
     return;
   }
   const posts = getPosts();
@@ -846,7 +1186,7 @@ function pinPost(id, onDone) {
   onDone();
 }
 
-/* ── Reactions ──────────────────────────────── */
+/* в”Ђв”Ђ Reactions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function getDominantEmoji(post) {
   const r = post.reactions || {};
   let top = null, max = 0;
@@ -887,7 +1227,41 @@ async function getEmojiFileMap() {
   return _emojiFileMap;
 }
 
-function buildReactionBtn(emoji, count, active, id) {
+const REACTION_ANIMATION_BATCH_SIZE = 5;
+const _batchedTgsAnimationStates = new WeakMap();
+
+function registerBatchedTgsPlayer(wrapper, player, index = null) {
+  let state = _batchedTgsAnimationStates.get(wrapper);
+  if (!state) {
+    state = { players: [], timer: null, running: false };
+    _batchedTgsAnimationStates.set(wrapper, state);
+  }
+
+  player.showFirstFrame?.();
+  if (index === null) state.players.push(player);
+  else state.players[index] = player;
+  clearTimeout(state.timer);
+  state.timer = setTimeout(() => {
+    const run = () => runBatchedTgsAnimations(wrapper);
+    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 900 });
+    else setTimeout(run, 120);
+  }, 80);
+}
+
+async function runBatchedTgsAnimations(wrapper) {
+  const state = _batchedTgsAnimationStates.get(wrapper);
+  if (!state || state.running || !wrapper.isConnected) return;
+
+  state.running = true;
+  const players = state.players.filter(Boolean);
+  for (let i = 0; i < players.length && wrapper.isConnected; i += REACTION_ANIMATION_BATCH_SIZE) {
+    const batch = players.slice(i, i + REACTION_ANIMATION_BATCH_SIZE);
+    await Promise.all(batch.map(player => player.playOnce?.() || Promise.resolve()));
+  }
+  state.running = false;
+}
+
+function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
   const btn = document.createElement('button');
   btn.className = 'btn-like' + (active ? ' btn-like--active' : '');
   btn.dataset.id = id;
@@ -899,8 +1273,10 @@ function buildReactionBtn(emoji, count, active, id) {
   getEmojiFileMap().then(map => {
     const file = map[emoji];
     if (file) {
-      const player = createTgsPlayer(file, 20, true);
+      const player = createTgsPlayer(file, 20, false, false, false);
+      player.dataset.tgs = '1';
       iconWrap.appendChild(player);
+      if (wrapper) registerBatchedTgsPlayer(wrapper, player, index);
     } else {
       iconWrap.textContent = emoji;
     }
@@ -923,25 +1299,25 @@ function buildReactionsEl(post) {
   wrapper.dataset.postId = id;
 
   const others = Object.keys(post.reactions)
-    .filter(e => e !== '❤️' && (post.reactions[e] || 0) > 0)
+    .filter(e => e !== HEART_EMOJI && (post.reactions[e] || 0) > 0)
     .sort((a, b) => (post.reactions[b] || 0) - (post.reactions[a] || 0));
 
-  const heartCount = post.reactions['❤️'] || 0;
+  const heartCount = post.reactions[HEART_EMOJI] || 0;
   let ordered;
   if (heartCount > 0) {
     const heartIdx = others.findIndex(e => (post.reactions[e] || 0) <= heartCount);
     const insertAt = heartIdx === -1 ? others.length : heartIdx;
-    ordered = [...others.slice(0, insertAt), '❤️', ...others.slice(insertAt)];
+    ordered = [...others.slice(0, insertAt), HEART_EMOJI, ...others.slice(insertAt)];
   } else if (others.length === 0) {
-    ordered = ['❤️'];
+    ordered = [HEART_EMOJI];
   } else {
     ordered = others;
   }
 
-  ordered.forEach(emoji => {
+  ordered.forEach((emoji, index) => {
     const count  = post.reactions[emoji] || 0;
     const active = post.myReactions.includes(emoji);
-    const btn = buildReactionBtn(emoji, count, active, id);
+    const btn = buildReactionBtn(emoji, count, active, id, wrapper, index);
     btn.addEventListener('click', () => toggleReaction(id, emoji));
     btn.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -986,7 +1362,7 @@ async function toggleReaction(id, emoji) {
     } else {
       const existingTypes = Object.keys(post.reactions).filter(e => post.reactions[e] > 0);
       if (!existingTypes.includes(emoji) && existingTypes.length >= 6) return;
-      const HEART = '❤️';
+      const HEART = HEART_EMOJI;
       if (!existingTypes.includes(emoji) && existingTypes.length === 5 && emoji !== HEART && existingTypes.includes(HEART)) {
         delete post.reactions[HEART];
         post.myReactions = post.myReactions.filter(e => e !== HEART);
@@ -1024,7 +1400,7 @@ async function toggleReaction(id, emoji) {
   if (post.myReactions.includes(emoji)) {
     removeReaction(post, emoji);
   } else {
-    const activeTypes = new Set(['❤️', ...Object.keys(post.reactions).filter(e => post.reactions[e] > 0)]);
+    const activeTypes = new Set([HEART_EMOJI, ...Object.keys(post.reactions).filter(e => post.reactions[e] > 0)]);
     if (!activeTypes.has(emoji) && activeTypes.size >= 3) return;
     if (post.myReactions.length >= reactionLimit()) removeReaction(post, post.myReactions[0]);
     addReaction(post, emoji);
@@ -1036,7 +1412,7 @@ async function toggleReaction(id, emoji) {
   syncReactions(id, post);
 }
 
-/* ── Emoji picker ───────────────────────────── */
+/* в”Ђв”Ђ Emoji picker в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 let _emojiMenuCleanup = null;
 
 function closeEmojiMenu() {
@@ -1117,7 +1493,22 @@ async function openEmojiMenu(id, likeBtn, scrollContainer) {
   setTimeout(() => document.addEventListener('click', closeEmojiMenu, { once: true }), 0);
 }
 
-/* ── Build post element ─────────────────────── */
+/* в”Ђв”Ђ Build post element в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+function buildReplyPreviewHtml(replyTo) {
+  const author = makeReplyAuthorName(replyTo);
+  const text = makeReplySnippet(replyTo);
+  return `
+    <div class="post-reply" data-reply-id="${replyTo.id || ''}">
+      <div class="post-reply__line"></div>
+      <div class="post-reply__body">
+        <div class="post-reply__label">\u041e\u0442\u0432\u0435\u0442</div>
+        <div class="post-reply__author">${escapeHtml(author)}</div>
+        <div class="post-reply__text">${escapeHtml(text)}</div>
+      </div>
+    </div>
+  `;
+}
+
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
   if (post.author) {
     const a   = post.author;
@@ -1127,8 +1518,8 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
       ? { name: lp.name, username: lp.username || a.profileUsername, verified: a.isVerified }
       : { name: a.displayName, username: a.profileUsername, verified: a.isVerified };
     avatarSrc  = own
-      ? (lp.avatar || a.avatarUrl || '/appimg/default_avatar.png')
-      : (a.avatarUrl || '/appimg/default_avatar.png');
+      ? (a.avatarPreviewUrl || getAvatarPreviewSrc(a.avatarUrl) || getProfileAvatarPreview(lp) || a.avatarUrl || '/appimg/default_avatar.png')
+      : (a.avatarPreviewUrl || getAvatarPreviewSrc(a.avatarUrl) || a.avatarUrl || '/appimg/default_avatar.png');
     isVerified = a.isVerified;
     badgeHtml  = isVerified
       ? `<img class="post__verified-badge" src="/appimg/verided.svg" alt="verified" />`
@@ -1137,10 +1528,14 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
 
   const newlineCount = (post.text ? post.text.match(/\n/g) || [] : []).length;
   const hasImages = post.images && post.images.length > 0;
-  const isTall = isVerified && (hasImages || newlineCount >= 2 || (post.text && post.text.length > 150));
+  const hasPinnedLabel = showPin && post.pinned;
+  const reactionCount = Object.keys(post.reactions || {}).length;
+  const hasWrappedReactions = reactionCount > 3;
+  const isTall = isVerified && (hasPinnedLabel || hasImages || hasWrappedReactions || newlineCount >= 2 || (post.text && post.text.length > 150));
   const extra = isVerified ? ' post--verified' + (isTall ? ' post--verified-tall' : '') : '';
   const el = document.createElement('div');
   el.className = 'post post--enter' + extra;
+  if (post.replyTo) el.classList.add('post--has-reply');
   el.dataset.postId = post.id;
   if (post.author) el.dataset.author = post.author.tgUsername;
   else if (window._tgUsername) el.dataset.author = window._tgUsername;
@@ -1154,13 +1549,13 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         <filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter>
         <filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter>
       </defs>
-      <g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="#4E7ADF"/></g>
-      <g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="#144CCC"/></g>
+      <g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="var(--verified-gradient-1, #4E7ADF)"/></g>
+      <g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="var(--verified-gradient-2, #144CCC)"/></g>
     </svg>` : '';
 
   el.innerHTML = `
     ${verifiedGradientSvg}
-    ${showPin && post.pinned ? `<div class="post__pinned"><img class="post__pinned-icon" src="/appimg/pin.svg" alt="" /><span>Закреплено</span></div>` : ''}
+    ${showPin && post.pinned ? `<div class="post__pinned"><img class="post__pinned-icon" src="/appimg/pin.svg" alt="" /><span>\u0417\u0430\u043a\u0440\u0435\u043f\u043b\u0435\u043d\u043e</span></div>` : ''}
     <div class="post__header">
       <img class="avatar" src="${avatarSrc}" alt="" />
       <div class="post__meta">
@@ -1178,22 +1573,25 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         </button>
       </div>` : ''}
     </div>
+    ${post.replyTo ? buildReplyPreviewHtml(post.replyTo) : ''}
     ${post.text ? `<div class="post__text-wrap"></div>` : ''}
     ${post.images && post.images.length ? `
     <div class="post__images post__images--${Math.min(post.images.length, 4)}">
       ${post.images.slice(0, 4).map(m => {
         const item = typeof m === 'string'
-          ? { src: m, type: /\.(mp4|webm|mov)$/i.test(m) ? 'video' : 'image', mime: '' }
+          ? { src: m, fullSrc: m, previewSrc: m, type: /\.(mp4|webm|mov)$/i.test(m) ? 'video' : 'image', mime: '' }
           : m;
-        if (item.type === 'video') return `<div class="post__video-wrap" data-src="${item.src}"></div>`;
+        const previewSrc = item.previewSrc || item.src;
+        const fullSrc = item.fullSrc || item.src;
+        if (item.type === 'video') return `<div class="post__video-wrap" data-src="${previewSrc}" data-full-src="${fullSrc}"></div>`;
         const isGif = item.mime === 'image/gif' || item.src.startsWith('data:image/gif');
-        return `<img class="post__image${isGif ? ' post__image--gif' : ''}" src="${item.src}" alt="" />`;
+        return `<img class="post__image${isGif ? ' post__image--gif' : ''}" src="${previewSrc}" data-full-src="${fullSrc}" loading="lazy" decoding="async" alt="" />`;
       }).join('')}
     </div>` : ''}
     <div class="post__footer">
       <div class="post__reactions-wrap">
         <div class="post__reactions" data-post-id="${post.id}"></div>
-        <button class="btn-comments" onclick="openThread(${post.id})">
+        <button class="btn-comments" data-thread="${post.id}">
           <img class="btn-comments__icon" src="/appimg/comments.svg" alt="" />
           ${(() => { const cnt = post.author ? (post.commentCount || 0) : getComments(post.id).length; return cnt ? `<span class="btn-comments__count">${cnt}</span>` : ''; })()}
         </button>
@@ -1210,25 +1608,35 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
   mountVideoPlayers(el);
 
-  requestAnimationFrame(() => {
+  const markTallPost = () => {
     const textEl = el.querySelector('.post__text');
-    if (!textEl) return;
-    const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
-    if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
-  });
+    const footerEl = el.querySelector('.post__footer');
+    if (textEl) {
+      const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
+      if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
+      if (isVerified && textEl.offsetHeight > lh * 1.8) el.classList.add('post--verified-tall');
+    }
+    if (isVerified && footerEl && footerEl.offsetHeight > 44) el.classList.add('post--verified-tall');
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(markTallPost, { timeout: 900 });
+  else requestAnimationFrame(markTallPost);
 
   return el;
 }
 
 function refreshPostsVerifiedState(isVerified) {
   const badgeSrc = '/appimg/verided.svg';
-  const bgSvg = `<svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter><filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter></defs><g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="#4E7ADF"/></g><g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="#144CCC"/></g></svg>`;
+  const bgSvg = `<svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><filter id="vbg-f0" x="31.8573" y="-18.3" width="517.444" height="323.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter><filter id="vbg-f1" x="-18.299" y="-16.7062" width="543.612" height="322.006" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="9.15" result="effect1_foregroundBlur"/></filter></defs><g filter="url(#vbg-f0)"><path d="M292.991 0C-16.3546 135.528 310.205 245.193 531.001 263.083L69.8857 287L50.1567 30.8316L292.991 0Z" fill="var(--verified-gradient-1, #4E7ADF)"/></g><g filter="url(#vbg-f1)"><path d="M195.173 1.59445C-81.7762 243.95 286.217 237.221 507.013 255.111L19.7289 287L0 30.8316L195.173 1.59445Z" fill="var(--verified-gradient-2, #144CCC)"/></g></svg>`;
 
   document.querySelectorAll('.post').forEach(postEl => {
     const textEl = postEl.querySelector('.post__text');
     const text = textEl ? textEl.textContent : '';
     const newlineCount = (text.match(/\n/g) || []).length;
-    const isTall = isVerified && (newlineCount >= 2 || text.length > 150);
+    const hasPinnedLabel = !!postEl.querySelector('.post__pinned');
+    const reactionCount = postEl.querySelectorAll('.post__reactions .btn-like').length;
+    const footerEl = postEl.querySelector('.post__footer');
+    const hasWrappedReactions = reactionCount > 3 || (footerEl && footerEl.offsetHeight > 44);
+    const isTall = isVerified && (hasPinnedLabel || hasWrappedReactions || newlineCount >= 2 || text.length > 150);
 
     postEl.classList.toggle('post--verified', isVerified);
     postEl.classList.toggle('post--verified-tall', isVerified && isTall);

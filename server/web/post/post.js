@@ -15,7 +15,7 @@ function formatTime(ms) {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-const VERIFIED_SVG = `<img class="badge" src="/web/verided.svg" alt="" />`;
+const VERIFIED_SVG = `<img class="badge" src="/web/post/verided.svg?v=9" alt="" />`;
 
 const VERIFIED_BG_SVG = `<svg class="post__verified-bg" viewBox="0 0 531 287" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <defs>
@@ -51,47 +51,135 @@ async function fetchTgs(url) {
   return json;
 }
 
-function makeTgsPlayer(url) {
+function makeTgsPlayer(url, autoplay = true, loop = true) {
   const wrap = document.createElement('div');
   wrap.className = 'btn-like__icon';
   let anim = null;
+  let mounting = true;
+  let playWhenReady = false;
+  let resolvePlay = null;
+
+  function finishPlay() {
+    anim?.goToAndStop(anim.totalFrames - 1, true);
+    if (resolvePlay) {
+      resolvePlay();
+      resolvePlay = null;
+    }
+  }
 
   fetchTgs(url).then(json => {
     if (!wrap.isConnected) return;
+    wrap.innerHTML = '';
     anim = lottie.loadAnimation({
       container:     wrap,
       animationData: structuredClone(json),
       renderer:      'svg',
-      loop:          true,
-      autoplay:      true,
+      loop,
+      autoplay,
       rendererSettings: { preserveAspectRatio: 'xMidYMid meet' },
     });
-  }).catch(() => {});
+    if (!autoplay) {
+      anim.stop();
+      anim.goToAndStop(0, true);
+      anim.pause();
+    }
+    if (!loop) anim.addEventListener('complete', finishPlay);
+    if (playWhenReady) {
+      playWhenReady = false;
+      anim.goToAndPlay(0, true);
+    }
+  }).catch(() => {
+    if (resolvePlay) {
+      resolvePlay();
+      resolvePlay = null;
+    }
+  }).finally(() => {
+    mounting = false;
+  });
+
+  wrap.playOnce = () => new Promise(resolve => {
+    if (!wrap.isConnected) {
+      resolve();
+      return;
+    }
+    resolvePlay = resolve;
+    if (anim) {
+      anim.goToAndPlay(0, true);
+      return;
+    }
+    if (mounting) {
+      playWhenReady = true;
+      return;
+    }
+    playWhenReady = true;
+  });
+
+  wrap.showFirstFrame = () => {
+    playWhenReady = false;
+    anim?.stop();
+    anim?.goToAndStop(0, true);
+    anim?.pause();
+  };
 
   return wrap;
 }
 
+const REACTION_ANIMATION_BATCH_SIZE = 5;
+
+async function runBatchedTgsAnimations(players, wrapper) {
+  for (let i = 0; i < players.length && wrapper.isConnected; i += REACTION_ANIMATION_BATCH_SIZE) {
+    const batch = players.slice(i, i + REACTION_ANIMATION_BATCH_SIZE);
+    await Promise.all(batch.map(player => player.playOnce?.() || Promise.resolve()));
+  }
+}
+
 /* ── Media ── */
-function isVideo(src) { return /\.(mp4|webm|ogg)$/i.test(src); }
+function normalizeMedia(item) {
+  if (typeof item === 'string') {
+    return {
+      src: item,
+      fullSrc: item,
+      previewSrc: item,
+      type: /\.(mp4|webm|mov|ogg)$/i.test(item) ? 'video' : 'image',
+    };
+  }
+  return {
+    src: item.src || item.previewSrc || item.fullSrc,
+    fullSrc: item.fullSrc || item.src,
+    previewSrc: item.previewSrc || item.src || item.fullSrc,
+    type: item.type || (/\.(mp4|webm|mov|ogg)$/i.test(item.fullSrc || item.src || '') ? 'video' : 'image'),
+  };
+}
+
+function isVideo(item) { return normalizeMedia(item).type === 'video'; }
 
 function buildMedia(images) {
   if (!images?.length) return null;
   if (images.length === 1) {
-    const src = images[0];
-    const el  = document.createElement(isVideo(src) ? 'video' : 'img');
+    const media = normalizeMedia(images[0]);
+    const el  = document.createElement(media.type === 'video' ? 'video' : 'img');
     el.className = 'media-single';
-    el.src = src;
-    if (isVideo(src)) { el.controls = true; el.playsInline = true; el.muted = true; }
+    el.src = media.type === 'video' ? media.fullSrc : media.previewSrc;
+    if (media.type === 'image') {
+      el.loading = 'lazy';
+      el.decoding = 'async';
+    }
+    if (media.type === 'video') { el.controls = true; el.playsInline = true; el.muted = true; el.preload = 'metadata'; }
     return el;
   }
   const count = Math.min(images.length, 4);
   const grid  = document.createElement('div');
   grid.className = `media-grid media-grid--${count}`;
-  images.slice(0, 4).forEach(src => {
-    const el = document.createElement(isVideo(src) ? 'video' : 'img');
+  images.slice(0, 4).forEach(item => {
+    const media = normalizeMedia(item);
+    const el = document.createElement(media.type === 'video' ? 'video' : 'img');
     el.className = 'media-grid__item';
-    el.src = src;
-    if (isVideo(src)) { el.controls = true; el.playsInline = true; el.muted = true; }
+    el.src = media.type === 'video' ? media.fullSrc : media.previewSrc;
+    if (media.type === 'image') {
+      el.loading = 'lazy';
+      el.decoding = 'async';
+    }
+    if (media.type === 'video') { el.controls = true; el.playsInline = true; el.muted = true; el.preload = 'metadata'; }
     grid.appendChild(el);
   });
   return grid;
@@ -103,6 +191,7 @@ const EMOJI_RE = /\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu;
 function buildTextNode(text, emojiMap) {
   const p = document.createElement('p');
   p.className = 'card__text';
+  const players = [];
 
   const parts = [];
   let last = 0;
@@ -115,31 +204,29 @@ function buildTextNode(text, emojiMap) {
 
   parts.forEach(part => {
     if (part.type === 'text') {
-      p.appendChild(document.createTextNode(part.value));
+      // Разбиваем текст по переносам строк и добавляем <br>
+      const lines = part.value.split('\n');
+      lines.forEach((line, index) => {
+        p.appendChild(document.createTextNode(line));
+        if (index < lines.length - 1) {
+          p.appendChild(document.createElement('br'));
+        }
+      });
     } else {
       const url = emojiMap[part.value];
       if (url) {
-        const wrap = document.createElement('span');
-        wrap.className = 'inline-emoji';
-        fetchTgs(url).then(json => {
-          if (!wrap.isConnected) return;
-          lottie.loadAnimation({
-            container: wrap,
-            animationData: structuredClone(json),
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            rendererSettings: { preserveAspectRatio: 'xMidYMid meet' },
-          });
-        }).catch(() => {
-          wrap.textContent = part.value;
-        });
-        p.appendChild(wrap);
+        const player = makeTgsPlayer(url, false, false);
+        player.classList.add('inline-emoji');
+        player.showFirstFrame?.();
+        players.push(player);
+        p.appendChild(player);
       } else {
         p.appendChild(document.createTextNode(part.value));
       }
     }
   });
+
+  setTimeout(() => runBatchedTgsAnimations(players, p), 0);
 
   return p;
 }
@@ -154,7 +241,7 @@ function buildReactions(reactions, emojiMap) {
     btn.className = 'btn-like';
     const url = emojiMap['❤️'];
     if (url) {
-      btn.appendChild(makeTgsPlayer(url));
+      btn.appendChild(makeTgsPlayer(url, false, false));
     } else {
       const span = document.createElement('span');
       span.style.cssText = 'font-size:13px;line-height:1;';
@@ -170,6 +257,7 @@ function buildReactions(reactions, emojiMap) {
 
   const wrap = document.createElement('div');
   wrap.className = 'reactions-wrap';
+  const players = [];
 
   entries.forEach(([emoji, count]) => {
     const btn = document.createElement('div');
@@ -177,7 +265,10 @@ function buildReactions(reactions, emojiMap) {
 
     const url = emojiMap[emoji];
     if (url) {
-      btn.appendChild(makeTgsPlayer(url));
+      const player = makeTgsPlayer(url, false, false);
+      player.showFirstFrame?.();
+      players.push(player);
+      btn.appendChild(player);
     } else {
       const span = document.createElement('span');
       span.style.cssText = 'font-size:13px;line-height:1;';
@@ -190,6 +281,8 @@ function buildReactions(reactions, emojiMap) {
     btn.appendChild(cnt);
     wrap.appendChild(btn);
   });
+
+  setTimeout(() => runBatchedTgsAnimations(players, wrap), 0);
 
   return wrap;
 }
@@ -213,8 +306,9 @@ function render(post, emojiMap) {
   root.appendChild(dateEl);
 
   // Card wrap
+  const newlineCount = (post.text ? post.text.match(/\n/g) || [] : []).length;
   const hasImages = post.images && post.images.length > 0;
-  const isTall = verified && (hasImages || (post.text && (post.text.length > 150 || post.text.includes('\n'))));
+  const isTall = verified && (hasImages || newlineCount >= 2 || (post.text && post.text.length > 150));
 
   const wrap = document.createElement('div');
   wrap.className = 'card-wrap' + (verified ? ' card-wrap--verified' + (isTall ? ' card-wrap--verified-tall' : '') : '');

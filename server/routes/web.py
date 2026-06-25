@@ -26,7 +26,7 @@ async def app_page(bouston_token: str | None = Cookie(default=None)):
 
 @router.get("/post/{post_id}", response_class=FileResponse)
 async def post_page(post_id: int):
-    return FileResponse(str(WEB_DIR / "post.html"))
+    return FileResponse(str(WEB_DIR / "post" / "post.html"))
 
 
 @router.get("/emoji")

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from bot import bot, dp
 from config import IMG_DIR, BASE_DIR
-from database import init_db
+from database import build_avatar_low_worker, init_db
 from ratelimit import RateLimitMiddleware
 from routes import comments, events, posts, users, web
 
@@ -23,6 +23,7 @@ EMOJI_DIR    = BASE_DIR / "img" / "emoji"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    asyncio.create_task(build_avatar_low_worker())
     asyncio.create_task(dp.start_polling(bot))
     yield
     await bot.session.close()

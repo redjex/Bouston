@@ -35,16 +35,29 @@ const _tgsSharedObserver = new IntersectionObserver(entries => {
   });
 }, { threshold: 0.1 });
 
-function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
+function createTgsPlayer(file, size = 40, autoplay = false, loop = true, lazyVisible = true) {
   const container = document.createElement('div');
   container.style.cssText = `width:${size}px;height:${size}px;flex-shrink:0;overflow:visible;`;
 
   let animation = null;
+  let mounting = false;
+  let playWhenReady = false;
+  let resolvePlay = null;
+
+  function finishPlay() {
+    animation?.goToAndStop(animation.totalFrames - 1, true);
+    if (resolvePlay) {
+      resolvePlay();
+      resolvePlay = null;
+    }
+  }
 
   function mount() {
-    if (animation) return;
+    if (animation || mounting) return;
+    mounting = true;
     fetchTgsData(file).then(json => {
       if (!container.isConnected) return;
+      container.innerHTML = '';
       animation = lottie.loadAnimation({
         container,
         animationData: structuredClone(json),
@@ -53,19 +66,33 @@ function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
         autoplay,
         rendererSettings: { progressiveLoad: true, preserveAspectRatio: 'xMidYMid meet' },
       });
-      if (!autoplay) animation.goToAndStop(0, true);
-      if (!loop) {
-        animation.addEventListener('complete', () => {
-          animation?.goToAndStop(animation.totalFrames - 1, true);
-        });
+      if (!autoplay) {
+        animation.stop();
+        animation.goToAndStop(0, true);
+        animation.pause();
       }
-    }).catch(() => {});
+      if (!loop) {
+        animation.addEventListener('complete', finishPlay);
+      }
+      if (playWhenReady) {
+        playWhenReady = false;
+        animation.goToAndPlay(0, true);
+      }
+    }).catch(() => {
+      if (resolvePlay) {
+        resolvePlay();
+        resolvePlay = null;
+      }
+    }).finally(() => {
+      mounting = false;
+    });
   }
 
   function unmount() {
     if (!animation) return;
     animation.destroy();
     animation = null;
+    mounting = false;
     container.innerHTML = '';
   }
 
@@ -78,12 +105,35 @@ function createTgsPlayer(file, size = 40, autoplay = false, loop = true) {
   }
 
   _tgsObserverMap.set(container, { mount, unmount });
-  _tgsSharedObserver.observe(container);
+  if (lazyVisible) _tgsSharedObserver.observe(container);
+  else mount();
 
   container.destroy = () => {
     unmount();
-    _tgsSharedObserver.unobserve(container);
+    if (lazyVisible) _tgsSharedObserver.unobserve(container);
     _tgsObserverMap.delete(container);
   };
+
+  container.playOnce = () => new Promise(resolve => {
+    if (!container.isConnected) {
+      resolve();
+      return;
+    }
+    resolvePlay = resolve;
+    if (animation) {
+      animation.goToAndPlay(0, true);
+      return;
+    }
+    playWhenReady = true;
+    mount();
+  });
+
+  container.showFirstFrame = () => {
+    playWhenReady = false;
+    animation?.stop();
+    animation?.goToAndStop(0, true);
+    animation?.pause();
+  };
+
   return container;
 }

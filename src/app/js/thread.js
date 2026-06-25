@@ -20,7 +20,7 @@ function renderThread() {
   if (_threadPostId === null) return;
 
   const profile    = getProfile();
-  const avatarSrc  = profile.avatar || '../../img/default_avatar.png';
+  const avatarSrc  = getProfileAvatarPreview(profile) || '../../img/default_avatar.png';
   const isVerified = profile.verified === true;
   const badgeHtml  = isVerified
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
@@ -72,7 +72,7 @@ async function renderComments() {
 
   // local post
   const profile    = getProfile();
-  const avatarSrc  = profile.avatar || '../../img/default_avatar.png';
+  const avatarSrc  = getProfileAvatarPreview(profile) || '../../img/default_avatar.png';
   const isVerified = profile.verified === true;
   const comments   = getComments(_threadPostId);
 
@@ -140,8 +140,8 @@ function buildCommentEl(c, isServer) {
   // Для своих комментариев используем локальный профиль — он всегда актуален
   const _lp       = c.isOwn ? getProfile() : null;
   const avatarSrc = c.isOwn
-    ? (_lp.avatar || c.author.avatarUrl || '../../img/default_avatar.png')
-    : (c.author.avatarUrl || '../../img/default_avatar.png');
+    ? (getProfileAvatarPreview(_lp) || c.author.avatarPreviewUrl || getAvatarPreviewSrc(c.author.avatarUrl) || c.author.avatarUrl || '../../img/default_avatar.png')
+    : (c.author.avatarPreviewUrl || getAvatarPreviewSrc(c.author.avatarUrl) || c.author.avatarUrl || '../../img/default_avatar.png');
   const displayName = c.isOwn ? _lp.name : c.author.displayName;
   const badgeHtml = c.author.isVerified
     ? `<img class="post__verified-badge" src="../../img/verided.svg" alt="verified" />`
@@ -251,8 +251,7 @@ function _updateCommentCountEl(btn, count) {
 
 function refreshCommentCount(postId) {
   document.querySelectorAll('.btn-comments').forEach(btn => {
-    const onclick = btn.getAttribute('onclick') || '';
-    if (onclick.includes(postId)) _updateCommentCountEl(btn, getComments(postId).length);
+    if (Number(btn.dataset.thread) === postId) _updateCommentCountEl(btn, getComments(postId).length);
   });
 }
 
@@ -262,11 +261,39 @@ async function _refreshServerCommentCount(postId) {
     if (!res.ok) return;
     const comments = await res.json();
     document.querySelectorAll('.btn-comments').forEach(btn => {
-      const onclick = btn.getAttribute('onclick') || '';
-      if (onclick.includes(postId)) _updateCommentCountEl(btn, comments.length);
+      if (Number(btn.dataset.thread) === postId) _updateCommentCountEl(btn, comments.length);
     });
   } catch {}
 }
+
+function handleNewCommentEvent(data) {
+  const postId = Number(data.postId);
+  const comment = data.comment;
+  if (!postId || !comment) return;
+
+  const post = _serverPostsMap.get(postId) || {
+    isOwn: data.postOwner === window._tgUsername,
+    author: { tgUsername: data.postOwner },
+  };
+  comment.isOwn = comment.author?.tgUsername === window._tgUsername;
+  notifyAboutComment(post, comment);
+
+  if (_threadIsServer && Number(_threadPostId) === postId) {
+    const container = document.getElementById('thread-comments');
+    if (container && !container.querySelector(`.comment__like[data-id="${comment.id}"]`)) {
+      container.querySelector('.thread-empty')?.remove();
+      container.appendChild(buildCommentEl(comment, true));
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  _refreshServerCommentCount(postId);
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-comments[data-thread]');
+  if (btn) openThread(Number(btn.dataset.thread));
+});
 
 document.getElementById('thread-back').addEventListener('click', closeThread);
 
@@ -301,6 +328,7 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
         if (emptyMsg) emptyMsg.remove();
         container.appendChild(buildCommentEl(newComment, true));
         container.scrollTop = container.scrollHeight;
+        notifyAboutComment(_serverPostsMap.get(_threadPostId), newComment);
         await _refreshServerCommentCount(_threadPostId);
       }
     } catch {}
@@ -316,6 +344,7 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
       author: {
         displayName: profile.name,
         avatarUrl:   profile.avatar || '../../img/default_avatar.png',
+        avatarPreviewUrl: getProfileAvatarPreview(profile) || '../../img/default_avatar.png',
         isVerified:  profile.verified === true,
       },
     };

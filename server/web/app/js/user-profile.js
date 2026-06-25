@@ -11,13 +11,20 @@ function _renderUserCard(info) {
   badge.style.display = (info.verified || info.isVerified) ? 'inline-block' : 'none';
 
   const av  = document.getElementById('up-avatar');
+  av.onerror = () => { av.onerror = null; av.src = '/appimg/default_avatar.png'; };
   av.src = info.avatar_url || info.avatarUrl || '/appimg/default_avatar.png';
 
   const bannerImg = document.getElementById('up-banner-img');
   const bannerPH  = document.getElementById('up-banner-placeholder');
   bannerImg.onload = () => bannerImg.classList.add('loaded');
-  bannerImg.src    = info.banner_url || '';
-  bannerPH.style.display = info.banner_url ? 'none' : '';
+  bannerImg.onerror = () => {
+    bannerImg.onerror = null;
+    bannerImg.src = '/appimg/baner.png';
+    bannerImg.classList.add('loaded');
+    bannerPH.style.display = 'none';
+  };
+  bannerImg.src    = info.banner_url || '/appimg/baner.png';
+  bannerPH.style.display = 'none';
 }
 
 async function openUserProfile(tgUsername) {
@@ -39,6 +46,9 @@ async function openUserProfile(tgUsername) {
 
   showView('user-profile');
 
+  const cachedInfo = getCachedUserProfile(tgUsername);
+  if (cachedInfo) _renderUserCard(cachedInfo);
+
   let posts = [];
   try {
     const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(tgUsername)}&limit=100`);
@@ -49,8 +59,7 @@ async function openUserProfile(tgUsername) {
     _renderUserCard(posts[0].author);
   }
 
-  fetch(`${API}/users/${encodeURIComponent(tgUsername)}`)
-    .then(r => r.ok ? r.json() : null)
+  fetchUserProfileCached(tgUsername)
     .then(info => { if (info) _renderUserCard(info); })
     .catch(() => {});
 
@@ -78,7 +87,7 @@ async function openUserProfile(tgUsername) {
     const btn    = wrap.querySelector('.post__more');
     const id     = Number(btn.dataset.id);
     const postEl = wrap.closest('.post');
-    btn.addEventListener('click', e => {
+    wrap.addEventListener('click', e => {
       e.stopPropagation();
       if (_openMenuId === id) { closeAllMenus(); return; }
       openPostMenu(id, postEl, document.getElementById('user-profile-wrap'), [
@@ -99,6 +108,7 @@ function closeUserProfile() {
 document.getElementById('btn-user-profile-back').addEventListener('click', closeUserProfile);
 
 document.getElementById('nav-home').addEventListener('click',    () => { _userProfileFrom = 'feed'; });
+document.getElementById('btn-profile-settings')?.addEventListener('click', () => { _userProfileFrom = 'settings'; });
 document.getElementById('nav-profile').addEventListener('click', () => { _userProfileFrom = 'profile'; });
 
 document.addEventListener('click', e => {

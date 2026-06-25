@@ -20,7 +20,7 @@ function renderThread() {
   if (_threadPostId === null) return;
 
   const profile    = getProfile();
-  const avatarSrc  = profile.avatar || '/appimg/default_avatar.png';
+  const avatarSrc  = getProfileAvatarPreview(profile) || '/appimg/default_avatar.png';
   const isVerified = profile.verified === true;
   const badgeHtml  = isVerified
     ? `<img class="post__verified-badge" src="/appimg/verided.svg" alt="verified" />`
@@ -71,7 +71,7 @@ async function renderComments() {
   }
 
   const profile    = getProfile();
-  const avatarSrc  = profile.avatar || '/appimg/default_avatar.png';
+  const avatarSrc  = getProfileAvatarPreview(profile) || '/appimg/default_avatar.png';
   const isVerified = profile.verified === true;
   const comments   = getComments(_threadPostId);
 
@@ -133,8 +133,8 @@ function buildCommentEl(c, isServer) {
 
   const _lp       = c.isOwn ? getProfile() : null;
   const avatarSrc = c.isOwn
-    ? (_lp.avatar || c.author.avatarUrl || '/appimg/default_avatar.png')
-    : (c.author.avatarUrl || '/appimg/default_avatar.png');
+    ? (getProfileAvatarPreview(_lp) || c.author.avatarPreviewUrl || getAvatarPreviewSrc(c.author.avatarUrl) || c.author.avatarUrl || '/appimg/default_avatar.png')
+    : (c.author.avatarPreviewUrl || getAvatarPreviewSrc(c.author.avatarUrl) || c.author.avatarUrl || '/appimg/default_avatar.png');
   const displayName = c.isOwn ? _lp.name : c.author.displayName;
   const badgeHtml = c.author.isVerified
     ? `<img class="post__verified-badge" src="/appimg/verided.svg" alt="verified" />`
@@ -242,8 +242,7 @@ function _updateCommentCountEl(btn, count) {
 
 function refreshCommentCount(postId) {
   document.querySelectorAll('.btn-comments').forEach(btn => {
-    const onclick = btn.getAttribute('onclick') || '';
-    if (onclick.includes(postId)) _updateCommentCountEl(btn, getComments(postId).length);
+    if (Number(btn.dataset.thread) === postId) _updateCommentCountEl(btn, getComments(postId).length);
   });
 }
 
@@ -253,17 +252,66 @@ async function _refreshServerCommentCount(postId) {
     if (!res.ok) return;
     const comments = await res.json();
     document.querySelectorAll('.btn-comments').forEach(btn => {
-      const onclick = btn.getAttribute('onclick') || '';
-      if (onclick.includes(postId)) _updateCommentCountEl(btn, comments.length);
+      if (Number(btn.dataset.thread) === postId) _updateCommentCountEl(btn, comments.length);
     });
   } catch {}
 }
+
+function handleNewCommentEvent(data) {
+  const postId = Number(data.postId);
+  const comment = data.comment;
+  if (!postId || !comment) return;
+
+  const post = _serverPostsMap.get(postId) || {
+    isOwn: data.postOwner === window._tgUsername,
+    author: { tgUsername: data.postOwner },
+  };
+  comment.isOwn = comment.author?.tgUsername === window._tgUsername;
+  notifyAboutComment(post, comment);
+
+  if (_threadIsServer && Number(_threadPostId) === postId) {
+    const container = document.getElementById('thread-comments');
+    if (container && !container.querySelector(`.comment__like[data-id="${comment.id}"]`)) {
+      container.querySelector('.thread-empty')?.remove();
+      container.appendChild(buildCommentEl(comment, true));
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  _refreshServerCommentCount(postId);
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-comments[data-thread]');
+  if (btn) openThread(Number(btn.dataset.thread));
+});
 
 document.getElementById('thread-back').addEventListener('click', closeThread);
 
 document.getElementById('thread-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('thread-overlay')) closeThread();
 });
+
+function syncThreadComposeInput() {
+  const input = document.getElementById('thread-compose-input');
+  const field = document.getElementById('thread-compose-field');
+  const compose = input.closest('.thread-panel__compose');
+  const hasValue = input.value.length > 0;
+
+  input.style.height = '40px';
+  const nextHeight = Math.min(input.scrollHeight, 120);
+  const multiline = hasValue && (input.value.includes('\n') || nextHeight > 40);
+
+  if (multiline) {
+    input.style.height = `${nextHeight}px`;
+  } else {
+    input.style.height = '40px';
+  }
+
+  field?.classList.toggle('has-value', hasValue);
+  field?.classList.toggle('multiline', multiline);
+  compose?.classList.toggle('multiline', multiline);
+}
 
 document.getElementById('thread-btn-post').addEventListener('click', async () => {
   const input = document.getElementById('thread-compose-input');
@@ -287,11 +335,11 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
       if (res.ok) {
         const newComment = await res.json();
         input.value = '';
-        input.style.height = 'auto';
-        input.closest('.thread-panel__compose')?.classList.remove('multiline');
+        syncThreadComposeInput();
         if (emptyMsg) emptyMsg.remove();
         container.appendChild(buildCommentEl(newComment, true));
         container.scrollTop = container.scrollHeight;
+        notifyAboutComment(_serverPostsMap.get(_threadPostId), newComment);
         await _refreshServerCommentCount(_threadPostId);
       }
     } catch {}
@@ -299,14 +347,14 @@ document.getElementById('thread-btn-post').addEventListener('click', async () =>
     const id  = Date.now();
     saveComment(_threadPostId, text);
     input.value = '';
-    input.style.height = 'auto';
-    input.closest('.thread-panel__compose')?.classList.remove('multiline');
+    syncThreadComposeInput();
     const profile = getProfile();
     const mapped  = {
       id, text, createdAt: id, likesCount: 0, myLike: false, isOwn: true,
       author: {
         displayName: profile.name,
         avatarUrl:   profile.avatar || '/appimg/default_avatar.png',
+        avatarPreviewUrl: getProfileAvatarPreview(profile) || '/appimg/default_avatar.png',
         isVerified:  profile.verified === true,
       },
     };
@@ -327,11 +375,10 @@ document.getElementById('thread-compose-input').addEventListener('keydown', e =>
 });
 
 document.getElementById('thread-compose-input').addEventListener('input', function () {
-  this.style.height = 'auto';
-  this.style.height = this.scrollHeight + 'px';
-  const compose = this.closest('.thread-panel__compose');
-  if (compose) compose.classList.toggle('multiline', this.scrollHeight > 40);
+  syncThreadComposeInput();
 });
+
+syncThreadComposeInput();
 
 document.addEventListener('click', () => {
   document.querySelectorAll('.comment-row--open').forEach(r => r.classList.remove('comment-row--open'));
