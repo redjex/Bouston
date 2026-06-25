@@ -101,6 +101,30 @@ async def get_posts(
         return result
 
 
+@router.get("/posts/{post_id}")
+async def get_post(post_id: int, request: Request = None):
+    viewer = ""
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    if auth_header.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
+            candidate = payload.get("sub", "")
+            session_id = payload.get("jti", "")
+            if candidate and session_id and await db_touch_auth_session(session_id, candidate):
+                viewer = candidate
+        except jwt.PyJWTError:
+            pass
+
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(POSTS_QUERY + "WHERE p.id = ?", (post_id,))
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(404, "Пост не найден")
+        reactions, my_reactions, comment_count = await fetch_post_extras(conn, row["id"], viewer)
+        return build_post_response(row, viewer, reactions, my_reactions, comment_count)
+
+
 @router.post("/posts")
 async def create_post(body: CreatePostRequest, username: str = Depends(require_auth)):
     check_post_rate(username)

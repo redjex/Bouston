@@ -426,6 +426,7 @@ function watchComposeEmpty(id) {
 /* в”Ђв”Ђ Compose photo в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 const _composeImages = { feed: [], profile: [] };
 const _composeReplyTargets = { feed: null, profile: null };
+let _selectedReplyPostEl = null;
 
 function getComposeImages(ns) { return _composeImages[ns] || []; }
 function clearComposeImages(ns) {
@@ -512,6 +513,10 @@ function renderComposeReplyTarget(ns) {
 function clearComposeReplyTarget(ns) {
   _composeReplyTargets[ns] = null;
   renderComposeReplyTarget(ns);
+  if (_selectedReplyPostEl) {
+    _selectedReplyPostEl.classList.remove('post--reply-selected');
+    _selectedReplyPostEl = null;
+  }
 }
 
 function setComposeReplyTarget(ns, postId) {
@@ -519,6 +524,9 @@ function setComposeReplyTarget(ns, postId) {
   if (!post) return;
   _composeReplyTargets[ns] = post;
   renderComposeReplyTarget(ns);
+  if (_selectedReplyPostEl) _selectedReplyPostEl.classList.remove('post--reply-selected');
+  _selectedReplyPostEl = document.querySelector(`.post[data-post-id="${Number(postId)}"]`);
+  _selectedReplyPostEl?.classList.add('post--reply-selected');
   const input = document.getElementById(`${ns}-compose-input`);
   input?.focus();
   input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -670,34 +678,36 @@ watchComposeEmpty('profile-compose-input');
 
   document.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' || !window.matchMedia('(max-width: 640px)').matches) return;
-    if (e.target.closest('button, a, input, textarea, [contenteditable], .post__images, .vplayer')) return;
+    if (e.target.closest('button, a, input, textarea, [contenteditable]')) return;
     const el = e.target.closest('.post[data-post-id]');
     if (!el) return;
-    active = { el, id: el.dataset.postId, scope: getComposeScopeFromPostEl(el), x: e.clientX, y: e.clientY, dx: 0 };
+    active = { el, id: el.dataset.postId, scope: getComposeScopeFromPostEl(el), x: e.clientX, y: e.clientY, dx: 0, locked: false };
+    el.setPointerCapture?.(e.pointerId);
   }, { passive: true });
 
   document.addEventListener('pointermove', e => {
     if (!active) return;
     const dx = e.clientX - active.x;
     const dy = e.clientY - active.y;
-    if (Math.abs(dy) > 42 && Math.abs(dy) > Math.abs(dx)) { resetActive(); return; }
+    if (!active.locked && Math.abs(dy) > 42 && Math.abs(dy) > Math.abs(dx)) { resetActive(); return; }
     if (dx >= 0) return;
+    if (Math.abs(dx) > 10) active.locked = true;
     active.dx = dx;
-    const offset = Math.max(-54, dx * 0.42);
+    const offset = Math.max(-58, dx * 0.48);
     active.el.classList.add('post--swiping');
-    active.el.classList.toggle('post--swipe-armed', Math.abs(dx) > 72);
+    active.el.classList.toggle('post--swipe-armed', Math.abs(dx) > 44);
     active.el.style.transform = `translateX(${offset}px)`;
   }, { passive: true });
 
   document.addEventListener('pointerup', () => {
     if (!active) return;
-    const picked = Math.abs(active.dx) > 72;
+    const picked = Math.abs(active.dx) > 44;
     const { el, id, scope } = active;
     resetActive();
     if (!picked) return;
     setComposeReplyTarget(scope, id);
     el.classList.add('post--reply-picked');
-    setTimeout(() => el.classList.remove('post--reply-picked'), 650);
+    setTimeout(() => el.classList.remove('post--reply-picked'), 950);
   }, { passive: true });
 
   document.addEventListener('pointercancel', resetActive, { passive: true });
@@ -1509,6 +1519,60 @@ function buildReplyPreviewHtml(replyTo) {
   `;
 }
 
+function getPostScrollContainer(postEl) {
+  return postEl.closest('.feed, .profile-wrap, .thread-panel__body, #user-profile-wrap') || document.scrollingElement;
+}
+
+function flashTargetPost(postEl) {
+  postEl.classList.remove('post--reply-target');
+  void postEl.offsetWidth;
+  postEl.classList.add('post--reply-target');
+  setTimeout(() => postEl.classList.remove('post--reply-target'), 1300);
+}
+
+function scrollToPostEl(postEl) {
+  postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  flashTargetPost(postEl);
+}
+
+async function fetchPostById(postId) {
+  const res = await apiFetch(`${API}/posts/${postId}`);
+  if (!res.ok) throw new Error('post not found');
+  return res.json();
+}
+
+async function jumpToReplyPost(postId) {
+  const id = Number(postId);
+  if (!id) return;
+
+  let target = document.querySelector(`.post[data-post-id="${id}"]`);
+  if (target) { scrollToPostEl(target); return; }
+
+  let post = getPostById(id);
+  if (!post) {
+    try { post = await fetchPostById(id); }
+    catch { return; }
+  }
+  registerServerPost(post);
+
+  const feedContainer = document.getElementById('posts-container');
+  if (feedContainer) {
+    if (typeof showView === 'function') showView('feed');
+    const merged = mergeFeedPostsCache([post]);
+    if (typeof syncFeedPostsIntoDom === 'function') syncFeedPostsIntoDom(feedContainer, merged);
+    else if (!feedContainer.querySelector(`.post[data-post-id="${id}"]`)) {
+      const postEl = buildPostEl(post, null, null, false, '', 0, false);
+      postEl.classList.remove('post--enter');
+      feedContainer.prepend(postEl);
+    }
+  }
+
+  requestAnimationFrame(() => {
+    target = document.querySelector(`.post[data-post-id="${id}"]`);
+    if (target) scrollToPostEl(target);
+  });
+}
+
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
   if (post.author) {
     const a   = post.author;
@@ -1606,6 +1670,11 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   el.querySelector('.post__reactions').replaceWith(buildReactionsEl(post));
   const textWrap = el.querySelector('.post__text-wrap');
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
+  el.querySelector('.post-reply')?.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    jumpToReplyPost(e.currentTarget.dataset.replyId);
+  });
   mountVideoPlayers(el);
 
   const markTallPost = () => {
