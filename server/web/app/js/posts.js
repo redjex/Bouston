@@ -846,10 +846,31 @@ function buildPostTextEl(text) {
     return p;
   }
 
+  function appendTextWithLinks(target, value) {
+    const urlRe = /((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
+    let last = 0, match;
+    while ((match = urlRe.exec(value)) !== null) {
+      const raw = match[0];
+      const clean = raw.replace(/[),.!?;:]+$/g, '');
+      const trailing = raw.slice(clean.length);
+      if (match.index > last) target.appendChild(document.createTextNode(value.slice(last, match.index)));
+      const a = document.createElement('a');
+      a.className = 'post__link';
+      a.href = clean.startsWith('www.') ? `https://${clean}` : clean;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = clean;
+      target.appendChild(a);
+      if (trailing) target.appendChild(document.createTextNode(trailing));
+      last = match.index + raw.length;
+    }
+    if (last < value.length) target.appendChild(document.createTextNode(value.slice(last)));
+  }
+
   // Р Р°Р·Р±РёРІР°РµРј С‚РµРєСЃС‚ РїРѕ РїРµСЂРµРЅРѕСЃР°Рј СЃС‚СЂРѕРє Рё РґРѕР±Р°РІР»СЏРµРј <br>
   const lines = text.split('\n');
   lines.forEach((line, index) => {
-    p.appendChild(document.createTextNode(line));
+    appendTextWithLinks(p, line);
     if (index < lines.length - 1) {
       p.appendChild(document.createElement('br'));
     }
@@ -882,7 +903,7 @@ function buildPostTextEl(text) {
         }
         if (last < val.length) frag.appendChild(document.createTextNode(val.slice(last)));
         node.replaceWith(frag);
-      } else {
+      } else if (node.nodeName !== 'A') {
         Array.from(node.childNodes).forEach(processNode);
       }
     }

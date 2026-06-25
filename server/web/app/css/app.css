@@ -1555,6 +1555,17 @@ body.no-verified-gradients .post__verified-bg {
 	 overflow-wrap: break-word;
 	 white-space: pre-wrap;
 }
+.post__link {
+	 color: #66a6ff;
+	 font-weight: 600;
+	 text-decoration: none;
+	 overflow-wrap: anywhere;
+}
+.post__link:hover {
+	 color: #9bc5ff;
+	 text-decoration: underline;
+	 text-underline-offset: 3px;
+}
 /* Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ post images Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ */
  .post__images {
 	 position: relative;
@@ -3125,6 +3136,21 @@ body.no-verified-gradients .post__verified-bg {
 	.post {
 		padding: 14px;
 		gap: 9px;
+	}
+
+	.post--has-reply.post--verified .post__verified-bg {
+		left: -48%;
+		bottom: -74px;
+		width: 164%;
+		opacity: 0.94;
+	}
+
+	.post--has-reply.post--verified-tall .post__verified-bg {
+		top: auto;
+		left: -52%;
+		bottom: -82px;
+		width: 178%;
+		height: auto;
 	}
 
 	.post--menu-open {
