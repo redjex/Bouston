@@ -1,6 +1,7 @@
 'use strict';
 
 let _userProfileFrom = 'feed';
+const USER_PROFILE_PAGE = 10;
 
 function _renderUserCard(info) {
   document.getElementById('up-name').textContent     = info.display_name || info.displayName || info.tgUsername || '';
@@ -27,7 +28,7 @@ function _renderUserCard(info) {
   bannerPH.style.display = 'none';
 }
 
-async function openUserProfile(tgUsername) {
+async function openUserProfile(tgUsername, options = {}) {
   if (!tgUsername) return;
 
   _userProfileFrom = _currentView;
@@ -44,14 +45,15 @@ async function openUserProfile(tgUsername) {
   postsEl.innerHTML = '<p class="feed__empty">Загрузка...</p>';
   wrap.scrollTop    = 0;
 
-  showView('user-profile');
+  showView('user-profile', { skipRoute: true });
+  if (!options.skipRoute) history.pushState({ view: 'user-profile', username: tgUsername }, '', `/u/${encodeURIComponent(tgUsername)}`);
 
   const cachedInfo = getCachedUserProfile(tgUsername);
   if (cachedInfo) _renderUserCard(cachedInfo);
 
   let posts = [];
   try {
-    const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(tgUsername)}&limit=100`);
+    const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(tgUsername)}&page=1&limit=${USER_PROFILE_PAGE}`);
     if (res.ok) posts = await res.json();
   } catch {}
 
@@ -69,7 +71,16 @@ async function openUserProfile(tgUsername) {
     return;
   }
 
-  let lastDateKey = null;
+  renderUserProfilePosts(postsEl, posts, tgUsername, false);
+
+  if (posts.length >= USER_PROFILE_PAGE) {
+    loadRemainingUserProfilePosts(postsEl, tgUsername, 2);
+  }
+}
+
+function renderUserProfilePosts(postsEl, posts, tgUsername, append) {
+  let lastDateKey = append ? (postsEl.dataset.lastDateKey || null) : null;
+  if (!append) postsEl.dataset.lastDateKey = '';
   posts.forEach((post, i) => {
     post.isOwn = post.author?.tgUsername === window._tgUsername;
     registerServerPost(post);
@@ -81,6 +92,7 @@ async function openUserProfile(tgUsername) {
     }
     postsEl.appendChild(buildPostEl(post, null, null, false, '', i, true));
   });
+  postsEl.dataset.lastDateKey = lastDateKey || '';
 
   postsEl.querySelectorAll('.post__more-wrap:not([data-bound])').forEach(wrap => {
     wrap.dataset.bound = '1';
@@ -98,6 +110,25 @@ async function openUserProfile(tgUsername) {
       ]);
     });
   });
+}
+
+async function loadRemainingUserProfilePosts(postsEl, tgUsername, startPage = 2) {
+  let page = startPage;
+  while (postsEl.isConnected) {
+    let posts = [];
+    try {
+      const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(tgUsername)}&page=${page}&limit=${USER_PROFILE_PAGE}`);
+      if (!res.ok) break;
+      posts = await res.json();
+    } catch {
+      break;
+    }
+    if (!posts.length) break;
+    renderUserProfilePosts(postsEl, posts, tgUsername, true);
+    if (posts.length < USER_PROFILE_PAGE) break;
+    page += 1;
+    await new Promise(resolve => runWhenIdle(resolve, 900));
+  }
 }
 
 function closeUserProfile() {

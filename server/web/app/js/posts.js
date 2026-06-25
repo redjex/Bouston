@@ -376,7 +376,8 @@ function buildVideoPlayer(src, extraClass = '', fullSrc = src) {
 
   const vid = document.createElement('video');
   vid.className   = 'vplayer__video';
-  vid.src         = src;
+  if (src === fullSrc) vid.src = src;
+  vid.poster      = src;
   vid.preload     = 'metadata';
   vid.muted       = true;
   vid.loop        = true;
@@ -386,12 +387,101 @@ function buildVideoPlayer(src, extraClass = '', fullSrc = src) {
   return wrap;
 }
 
+function createMediaProgress() {
+  const el = document.createElement('div');
+  el.className = 'media-progress';
+  el.innerHTML = `
+    <svg class="media-progress__svg" viewBox="0 0 44 44" aria-hidden="true">
+      <circle class="media-progress__track" cx="22" cy="22" r="18"></circle>
+      <circle class="media-progress__bar" cx="22" cy="22" r="18"></circle>
+    </svg>
+    <span class="media-progress__text">0%</span>
+  `;
+  setMediaProgress(el, 0);
+  return el;
+}
+
+function setMediaProgress(el, value) {
+  if (!el) return;
+  const pct = Math.max(0, Math.min(100, Math.round(value || 0)));
+  el.style.setProperty('--media-progress', pct);
+  const text = el.querySelector('.media-progress__text');
+  if (text) text.textContent = pct + '%';
+}
+
+function loadMediaBlobWithProgress(url, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'blob';
+    xhr.onprogress = event => {
+      if (event.lengthComputable) onProgress((event.loaded / event.total) * 100);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(100);
+        resolve(URL.createObjectURL(xhr.response));
+      } else {
+        reject(new Error('media load failed'));
+      }
+    };
+    xhr.onerror = reject;
+    xhr.send();
+  });
+}
+
+function hydratePostImage(img) {
+  const fullSrc = img.dataset.fullSrc;
+  if (!fullSrc || fullSrc === img.src || img.dataset.loadingFull === '1') return;
+  img.dataset.loadingFull = '1';
+  img.classList.add('post__image--previewing');
+  const progress = createMediaProgress();
+  img.parentElement?.appendChild(progress);
+  loadMediaBlobWithProgress(fullSrc, pct => setMediaProgress(progress, pct))
+    .then(blobUrl => {
+      img.onload = () => {
+        img.classList.remove('post__image--previewing');
+        progress.remove();
+      };
+      img.src = blobUrl;
+    })
+    .catch(() => {
+      img.classList.remove('post__image--previewing');
+      progress.remove();
+    });
+}
+
+function hydratePostVideo(player) {
+  const vid = player.querySelector('.vplayer__video');
+  const fullSrc = player.dataset.fullSrc;
+  if (!vid || !fullSrc || fullSrc === vid.src || player.dataset.loadingFull === '1') return;
+  player.dataset.loadingFull = '1';
+  player.classList.add('vplayer--previewing');
+  const progress = createMediaProgress();
+  player.appendChild(progress);
+  loadMediaBlobWithProgress(fullSrc, pct => setMediaProgress(progress, pct))
+    .then(blobUrl => {
+      vid.onloadeddata = () => {
+        player.classList.remove('vplayer--previewing');
+        progress.remove();
+      };
+      vid.src = blobUrl;
+      vid.load();
+    })
+    .catch(() => {
+      player.classList.remove('vplayer--previewing');
+      progress.remove();
+    });
+}
+
 function mountVideoPlayers(container) {
   container.querySelectorAll('.post__video-wrap[data-src]').forEach(wrap => {
     const src = wrap.dataset.src;
     const player = buildVideoPlayer(src, 'post__video', wrap.dataset.fullSrc || src);
     wrap.replaceWith(player);
+    hydratePostVideo(player);
   });
+  container.querySelectorAll('.post__image[data-full-src]').forEach(hydratePostImage);
 }
 
 /* в”Ђв”Ђ Compose helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
@@ -546,22 +636,32 @@ function initComposePhoto(ns) {
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
     const isVideo = file.type.startsWith('video/');
     const reader  = new FileReader();
+    const wrap = document.createElement('div');
+    wrap.className = 'compose__preview-wrap compose__preview-wrap--loading';
+    const progress = createMediaProgress();
+    wrap.appendChild(progress);
+    previews.appendChild(wrap);
+
+    reader.onprogress = e => {
+      if (e.lengthComputable) setMediaProgress(progress, (e.loaded / e.total) * 100);
+    };
     reader.onload = e => {
       const dataUrl = e.target.result;
       _composeImages[ns].push({ src: dataUrl, type: isVideo ? 'video' : 'image', mime: file.type });
-
-      const wrap = document.createElement('div');
-      wrap.className = 'compose__preview-wrap';
-
       if (isVideo) {
         const vid = document.createElement('video');
         vid.src = dataUrl; vid.muted = true; vid.playsInline = true;
-        wrap.appendChild(vid);
+        wrap.insertBefore(vid, progress);
       } else {
         const img = document.createElement('img');
         img.src = dataUrl;
-        wrap.appendChild(img);
+        wrap.insertBefore(img, progress);
       }
+      setMediaProgress(progress, 100);
+      setTimeout(() => {
+        wrap.classList.remove('compose__preview-wrap--loading');
+        progress.remove();
+      }, 180);
 
       const rm = document.createElement('button');
       rm.className = 'compose__preview-remove';
@@ -572,8 +672,8 @@ function initComposePhoto(ns) {
         wrap.remove();
       });
       wrap.appendChild(rm);
-      previews.appendChild(wrap);
     };
+    reader.onerror = () => wrap.remove();
     reader.readAsDataURL(file);
   }
 
@@ -1022,11 +1122,11 @@ function startEditPost(id, postEl, onDone) {
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className   = 'post__edit-btn post__edit-btn--cancel';
-  cancelBtn.textContent = 'РћС‚РјРµРЅР°';
+  cancelBtn.textContent = '\u041e\u0442\u043c\u0435\u043d\u0430';
 
   const saveBtn = document.createElement('button');
   saveBtn.className   = 'post__edit-btn post__edit-btn--save';
-  saveBtn.textContent = 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+  saveBtn.textContent = '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c';
 
   actions.append(cancelBtn, saveBtn);
   if (textWrap) textWrap.replaceWith(textarea);
@@ -1055,9 +1155,9 @@ function startEditPost(id, postEl, onDone) {
   };
   const failSave = message => {
     saveBtn.disabled = false;
-    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+    saveBtn.textContent = saveBtn.dataset.idleText || '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c';
     delete saveBtn.dataset.idleText;
-    showPostError(message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚', saveBtn);
+    showPostError(message || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u043e\u0441\u0442', saveBtn);
   };
 
   cancelBtn.addEventListener('click', e => {
@@ -1068,9 +1168,9 @@ function startEditPost(id, postEl, onDone) {
   saveBtn.addEventListener('click', async e => {
     e.preventDefault();
     const newText = textarea.value.trim();
-    if (!newText) { failSave('РўРµРєСЃС‚ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј'); return; }
+    if (!newText) { failSave('\u0422\u0435\u043a\u0441\u0442 \u043d\u0435 \u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u043f\u0443\u0441\u0442\u044b\u043c'); return; }
     saveBtn.dataset.idleText = saveBtn.textContent;
-    saveBtn.textContent = 'РЎРѕС…СЂР°РЅРµРЅРёРµ...';
+    saveBtn.textContent = '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435...';
     saveBtn.disabled = true;
 
     if (isServer) {
@@ -1091,7 +1191,7 @@ function startEditPost(id, postEl, onDone) {
           mergeFeedPostsCache([nextPost]);
           if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
         } else {
-          let message = 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚';
+          let message = '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u043e\u0441\u0442';
           try {
             const data = await res.json();
             if (data?.detail) message = data.detail;
@@ -1102,10 +1202,10 @@ function startEditPost(id, postEl, onDone) {
       } catch (err) {
         clearTimeout(timeout);
         if (err.name === 'AbortError') {
-          failSave('РЎРµСЂРІРµСЂ РЅРµ РѕС‚РІРµС‚РёР», РїРѕРїСЂРѕР±СѓР№ РµС‰С‘ СЂР°Р·');
+          failSave('\u0421\u0435\u0440\u0432\u0435\u0440 \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0435\u0449\u0435 \u0440\u0430\u0437');
           return;
         }
-        failSave('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј');
+        failSave('\u041d\u0435\u0442 \u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u044f \u0441 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u043c');
         return;
       }
     } else {
@@ -1113,7 +1213,7 @@ function startEditPost(id, postEl, onDone) {
       const p = posts.find(p => p.id === id);
       if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
     }
-    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+    saveBtn.textContent = saveBtn.dataset.idleText || '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c';
     delete saveBtn.dataset.idleText;
     closeEditor(isServer ? (_serverPostsMap.get(id)?.text || newText) : newText);
     onDone();
@@ -1649,7 +1749,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         const fullSrc = item.fullSrc || item.src;
         if (item.type === 'video') return `<div class="post__video-wrap" data-src="${previewSrc}" data-full-src="${fullSrc}"></div>`;
         const isGif = item.mime === 'image/gif' || item.src.startsWith('data:image/gif');
-        return `<img class="post__image${isGif ? ' post__image--gif' : ''}" src="${previewSrc}" data-full-src="${fullSrc}" loading="lazy" decoding="async" alt="" />`;
+        return `<div class="post__media-item${isGif ? ' post__media-item--gif' : ''}"><img class="post__image${isGif ? ' post__image--gif' : ''}" src="${previewSrc}" data-full-src="${fullSrc}" loading="lazy" decoding="async" alt="" /></div>`;
       }).join('')}
     </div>` : ''}
     <div class="post__footer">

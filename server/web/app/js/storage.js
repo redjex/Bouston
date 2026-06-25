@@ -8,7 +8,7 @@ const PROFILE_CACHE_TTL = 10 * 60 * 1000;
 const USER_PROFILES_KEY = 'bouston_user_profiles_cache';
 const DEFAULT_PROFILE = {
   name: 'Bouston', username: '', bio: '',
-  avatar: null, avatarPreview: null, banner: null, verified: false,
+  avatar: null, avatarPreview: null, banner: null, bannerPreview: null, verified: false,
 };
 
 let _postsCache   = null;
@@ -173,6 +173,10 @@ function getAvatarPreviewSrc(src) {
 
 function getProfileAvatarPreview(profile = getProfile()) {
   return getAvatarPreviewSrc(profile.avatarPreview) || getAvatarPreviewSrc(profile.avatar) || profile.avatar;
+}
+
+function getProfileBannerSrc(profile = getProfile()) {
+  return profile.bannerPreview || profile.banner || null;
 }
 
 function invalidateProfileCache() { _profileCache = null; }

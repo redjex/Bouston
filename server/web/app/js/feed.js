@@ -8,13 +8,14 @@ function renderFeedComposeAvatar() {
   if (el) el.src = getProfileAvatarPreview(p) || '/appimg/default_avatar.png';
 }
 
-const FEED_PAGE = 20;
+const FEED_PAGE = 10;
 let _feedObserver = null;
 let _feedPage     = 1;
 let _feedLoading  = false;
 let _feedDone     = false;
 let _feedRendered = false;
 let _feedRefreshPromise = null;
+let _feedGapFillPromise = null;
 let _feedRenderToken = 0;
 
 function renderPostSkeletons(container, count = 4) {
@@ -48,6 +49,10 @@ function runWhenIdle(fn, timeout = 600) {
     return;
   }
   setTimeout(fn, 32);
+}
+
+function waitForIdle(timeout = 900) {
+  return new Promise(resolve => runWhenIdle(resolve, timeout));
 }
 
 function attachFeedMenu(container) {
@@ -134,7 +139,7 @@ async function refreshFeedFromServer(container, options = {}) {
     _feedRendered = true;
     _feedPage = 2;
     if (posts.length < FEED_PAGE) { _feedDone = true; return; }
-    const cachedPageCount = Math.max(1, Math.ceil(getFeedPostsCache().length / FEED_PAGE));
+    const cachedPageCount = Math.min(3, Math.max(1, Math.ceil(getFeedPostsCache().length / FEED_PAGE)));
     fillFeedGapsFromServer(container, 2, cachedPageCount);
     if (!container.querySelector('.feed-sentinel')) _attachFeedSentinel(container);
   })().finally(() => { _feedRefreshPromise = null; });
@@ -147,8 +152,8 @@ function _renderFeedPostsList(container, posts) {
   if (_feedObserver) { _feedObserver.disconnect(); _feedObserver = null; }
   container.innerHTML = '';
   container.dataset.lastDateKey = '';
-  const first = posts.slice(0, 6);
-  const rest = posts.slice(6);
+  const first = posts.slice(0, FEED_PAGE);
+  const rest = posts.slice(FEED_PAGE);
   first.forEach(p => registerServerPost(p));
   _appendPostsToFeed(container, first, false);
   appendFeedPostsInChunks(container, rest, token);
@@ -193,6 +198,7 @@ async function fillFeedGapsFromServer(container, startPage, maxPage) {
       syncFeedPostsIntoDom(container, merged);
       _feedPage = Math.max(_feedPage, page + 1);
       if (posts.length < FEED_PAGE) { _feedDone = true; break; }
+      await waitForIdle(1200);
     }
     if (!_feedDone && !container.querySelector('.feed-sentinel')) _attachFeedSentinel(container);
   })().finally(() => { _feedGapFillPromise = null; });

@@ -24,6 +24,26 @@ async def app_page(bouston_token: str | None = Cookie(default=None)):
     return FileResponse(str(WEB_DIR / "app" / "index.html"))
 
 
+@router.get("/feed")
+async def feed_page(bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
+@router.get("/profile")
+async def profile_page(bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
+@router.get("/settings")
+async def settings_page(bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
+@router.get("/u/{username}")
+async def user_profile_page(username: str, bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
 @router.get("/post/{post_id}", response_class=FileResponse)
 async def post_page(post_id: int):
     return FileResponse(str(WEB_DIR / "post" / "post.html"))

@@ -2,6 +2,8 @@ import asyncio
 import base64
 import io
 import json
+import shutil
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -54,6 +56,33 @@ def _save_image_preview(raw: bytes, stem: str, ext: str) -> str | None:
             preview_name = f"{stem}.preview.jpg"
             img.save(PREVIEW_DIR / preview_name, "JPEG", quality=72, optimize=True, progressive=True)
             return f"previews/{preview_name}"
+    except Exception:
+        return None
+
+
+def _save_video_preview(video_path: Path, stem: str) -> str | None:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    preview_name = f"{stem}.preview.jpg"
+    preview_path = PREVIEW_DIR / preview_name
+    try:
+        subprocess.run(
+            [
+                ffmpeg, "-y",
+                "-ss", "00:00:00.250",
+                "-i", str(video_path),
+                "-frames:v", "1",
+                "-vf", "scale=320:320:force_original_aspect_ratio=increase,crop=320:320,boxblur=8:1",
+                "-q:v", "8",
+                str(preview_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+            check=True,
+        )
+        return f"previews/{preview_name}" if preview_path.exists() else None
     except Exception:
         return None
 
@@ -155,9 +184,14 @@ async def create_post(body: CreatePostRequest, username: str = Depends(require_a
             stem = uuid.uuid4().hex
             filename = f"{stem}.{ext}"
             media_bytes = base64.b64decode(data)
-            (POSTS_IMG_DIR / filename).write_bytes(media_bytes)
-            preview = _save_image_preview(media_bytes, stem, ext)
+            media_path = POSTS_IMG_DIR / filename
+            media_path.write_bytes(media_bytes)
             media_type = "video" if ext.lower() in VIDEO_EXTS else "image"
+            preview = (
+                _save_video_preview(media_path, stem)
+                if media_type == "video"
+                else _save_image_preview(media_bytes, stem, ext)
+            )
             saved.append({
                 "file": filename,
                 "preview": preview,

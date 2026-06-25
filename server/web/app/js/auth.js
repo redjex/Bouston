@@ -3,7 +3,7 @@
     const API = '';
 
     if (localStorage.getItem('bouston_token')) {
-      window.location.href = '/web/app/app.html';
+      window.location.href = '/feed';
     }
 
     // Theme
@@ -141,7 +141,7 @@
         localStorage.setItem('bouston_token', data.token);
         localStorage.setItem('bouston_user', JSON.stringify(data.user));
         document.cookie = `bouston_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-        window.location.href = '/web/app/app.html';
+        window.location.href = '/feed';
       } catch (err) {
         showError('error-code', err.message);
       } finally {
