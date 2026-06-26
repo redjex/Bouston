@@ -34,6 +34,43 @@ DEFAULT_AVATAR_URL = "/appimg/default_avatar.png"
 DEFAULT_BANNER_URL = "/appimg/baner.png"
 
 
+async def _get_user_by_public_username(username: str):
+    u = normalize(username)
+    if not u:
+        return None
+    user = await db_get_user(u)
+    if user:
+        return user
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT * FROM users WHERE LOWER(profile_username) = ?",
+            (u,),
+        )
+        return await cursor.fetchone()
+
+
+def _public_asset_key(user, fallback: str) -> str:
+    return (user["profile_username"] if user and user["profile_username"] else fallback)
+
+
+def _banner_url(user, fallback: str, updated_at: int) -> str:
+    if not user or not user["banner_path"]:
+        return DEFAULT_BANNER_URL
+    source_path = Path(user["banner_path"])
+    if not source_path.exists():
+        return DEFAULT_BANNER_URL
+    banner_key = _public_asset_key(user, fallback)
+    target_path = BANNERS_DIR / f"{banner_key}.jpg"
+    if source_path != target_path:
+        try:
+            if not target_path.exists() or target_path.stat().st_mtime < source_path.stat().st_mtime:
+                target_path.write_bytes(source_path.read_bytes())
+        except Exception:
+            pass
+    return f"{SERVER_BASE}/img/banners/{banner_key}.jpg?t={updated_at}"
+
+
 def _customization_payload(user, username: str) -> dict:
     t = int(user["updated_at"] or 0)
     wallpaper_url = None
@@ -167,10 +204,10 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
         algorithm=JWT_ALGO,
     )
     t = int(user["updated_at"] or 0) if user else 0
-    avatar_url, avatar_preview_url = avatar_urls(username, user["avatar_path"], t) if user else (None, None)
+    avatar_url, avatar_preview_url = avatar_urls(user["profile_username"] or username, user["avatar_path"], t) if user else (None, None)
     avatar_url = avatar_url or DEFAULT_AVATAR_URL
     avatar_preview_url = avatar_preview_url or avatar_url
-    banner_url = f"{SERVER_BASE}/img/banners/{username}.jpg?t={t}" if (user and user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
+    banner_url = _banner_url(user, username, t)
 
     return {
         "ok": True,
@@ -228,15 +265,15 @@ async def revoke_auth_session(session_id: str, username: str = Depends(require_a
 @router.get("/users/{username}")
 async def get_user_fast(username: str):
     u    = normalize(username)
-    user = await db_get_user(u)
+    user = await _get_user_by_public_username(u)
     if not user:
         raise HTTPException(404, "Пользователь не найден")
 
     t          = int(user["updated_at"] or 0)
-    avatar_url, avatar_preview_url = avatar_urls(u, user["avatar_path"], t)
+    avatar_url, avatar_preview_url = avatar_urls(user["profile_username"] or user["username"], user["avatar_path"], t)
     avatar_url = avatar_url or DEFAULT_AVATAR_URL
     avatar_preview_url = avatar_preview_url or avatar_url
-    banner_url = f"{SERVER_BASE}/img/banners/{u}.jpg?t={t}" if (user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
+    banner_url = _banner_url(user, user["username"], t)
 
     return {
         "username":         user["username"],
@@ -379,7 +416,7 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
     if body.profile_username is not None:
         u = body.profile_username.strip().lstrip("@").lower()
         if u and not USERNAME_RE.match(u):
-            raise HTTPException(400, "Юзернейм: от 3 до 20 символов, только буквы, цифры, _ и .")
+            raise HTTPException(400, "Юзернейм: от 3 до 20 символов, только буквы, цифры и _")
         body.profile_username = u or None
 
         if body.profile_username:
@@ -404,9 +441,11 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
             raise HTTPException(400, "Неверный формат аватарки")
         if len(img_bytes) > MAX_AVATAR_BYTES:
             raise HTTPException(400, "Аватарка слишком большая (макс 5 МБ)")
-        avatar_file = IMG_DIR / f"{tg_username}.jpg"
+        avatar_key = body.profile_username if body.profile_username is not None else user["profile_username"]
+        avatar_key = avatar_key or tg_username
+        avatar_file = IMG_DIR / f"{avatar_key}.jpg"
         save_avatar_image(img_bytes, avatar_file, size=640)
-        ensure_avatar_low(tg_username, avatar_file)
+        ensure_avatar_low(avatar_key, avatar_file)
         new_avatar_path = str(avatar_file)
 
     new_banner_path: str | None = None
@@ -420,7 +459,9 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
             raise HTTPException(400, "Неверный формат баннера")
         if len(img_bytes) > MAX_AVATAR_BYTES:
             raise HTTPException(400, "Баннер слишком большой (макс 5 МБ)")
-        banner_file = BANNERS_DIR / f"{tg_username}.jpg"
+        banner_key = body.profile_username if body.profile_username is not None else user["profile_username"]
+        banner_key = banner_key or tg_username
+        banner_file = BANNERS_DIR / f"{banner_key}.jpg"
         banner_file.write_bytes(img_bytes)
         new_banner_path = str(banner_file)
 
@@ -442,8 +483,10 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
 
     if new_avatar_path:
         import asyncio
-        avatar_url, avatar_preview_url = avatar_urls(tg_username, new_avatar_path, now)
-        avatar_url = avatar_url or f"{SERVER_BASE}/img/{tg_username}.jpg?t={int(now)}"
+        avatar_key = body.profile_username if body.profile_username is not None else user["profile_username"]
+        avatar_key = avatar_key or tg_username
+        avatar_url, avatar_preview_url = avatar_urls(avatar_key, new_avatar_path, now)
+        avatar_url = avatar_url or f"{SERVER_BASE}/img/{avatar_key}.jpg?t={int(now)}"
         avatar_preview_url = avatar_preview_url or avatar_url
         asyncio.create_task(broadcast_event({
             "type":      "avatar_update",

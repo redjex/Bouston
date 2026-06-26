@@ -24,6 +24,7 @@ AVATAR_LOW_SCAN_INTERVAL = 10
 POSTS_QUERY = """
     SELECT p.*,
            u.display_name, u.first_name, u.profile_username,
+           u.user_id      AS author_user_id,
            u.avatar_path  AS author_avatar_path,
            u.is_premium   AS author_premium,
            u.verified     AS author_verified,
@@ -33,6 +34,7 @@ POSTS_QUERY = """
            rp.images      AS reply_images,
            rp.created_at  AS reply_created_at,
            ru.username    AS reply_tg_username,
+           ru.user_id     AS reply_user_id,
            ru.display_name AS reply_display_name,
            ru.first_name  AS reply_first_name,
            ru.profile_username AS reply_profile_username
@@ -45,6 +47,7 @@ POSTS_QUERY = """
 COMMENTS_QUERY = """
     SELECT c.*,
            u.display_name, u.first_name, u.profile_username,
+           u.user_id      AS author_user_id,
            u.avatar_path  AS author_avatar_path,
            u.verified     AS author_verified,
            u.updated_at   AS updated_at
@@ -63,22 +66,23 @@ def save_avatar_image(raw: bytes, output_path: Path, size: int = 640, quality: i
         img.save(output_path, "JPEG", quality=quality, optimize=True, progressive=True)
 
 
-def ensure_avatar_low(username: str, avatar_path: str | Path | None) -> str | None:
+def ensure_avatar_low(avatar_key, avatar_path):
+    avatar_key = str(avatar_key)
     avatar_path = Path(avatar_path) if avatar_path else None
     if Image is None or ImageOps is None or not avatar_path or not avatar_path.exists():
         return None
-    low_path = AVATAR_LOW_DIR / f"{username}.jpg"
+    low_path = AVATAR_LOW_DIR / f"{avatar_key}.jpg"
     try:
         src_mtime = avatar_path.stat().st_mtime
         if low_path.exists() and low_path.stat().st_mtime >= src_mtime:
             with Image.open(low_path) as low_img:
                 if low_img.size == AVATAR_LOW_SIZE:
-                    return f"avatar_low/{username}.jpg"
+                    return f"avatar_low/{avatar_key}.jpg"
         with Image.open(avatar_path) as img:
             img = ImageOps.exif_transpose(img).convert("RGB")
             img = ImageOps.fit(img, AVATAR_LOW_SIZE, Image.Resampling.LANCZOS, centering=(0.5, 0.5))
             img.save(low_path, "JPEG", quality=70, optimize=True, progressive=True)
-            return f"avatar_low/{username}.jpg"
+            return f"avatar_low/{avatar_key}.jpg"
     except Exception:
         return None
 
@@ -93,12 +97,22 @@ def build_avatar_low_from_img_dir() -> None:
         ensure_avatar_low(avatar_path.stem, avatar_path)
 
 
-def avatar_urls(username: str, avatar_path: str | None, updated_at: float | int | None) -> tuple[str | None, str | None]:
+def avatar_urls(avatar_key, avatar_path, updated_at):
     if not avatar_path or not Path(avatar_path).exists():
         return None, None
+    avatar_key = str(avatar_key)
+    source_path = Path(avatar_path)
+    target_path = IMG_DIR / f"{avatar_key}.jpg"
+    if source_path != target_path:
+        try:
+            if not target_path.exists() or target_path.stat().st_mtime < source_path.stat().st_mtime:
+                target_path.write_bytes(source_path.read_bytes())
+            avatar_path = str(target_path)
+        except Exception:
+            pass
     t = int(updated_at or 0)
-    full_url = f"{SERVER_BASE}/img/{username}.jpg?t={t}"
-    low = ensure_avatar_low(username, avatar_path)
+    full_url = f"{SERVER_BASE}/img/{avatar_key}.jpg?t={t}"
+    low = ensure_avatar_low(avatar_key, avatar_path)
     preview_url = f"{SERVER_BASE}/img/{low}?t={t}" if low else full_url
     return full_url, preview_url
 
@@ -527,7 +541,7 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
             "mime":       item.get("mime") or "",
         })
 
-    avatar_url, avatar_preview_url = avatar_urls(row["tg_username"], row["author_avatar_path"], row["updated_at"])
+    avatar_url, avatar_preview_url = avatar_urls(row["profile_username"] or row["tg_username"], row["author_avatar_path"], row["updated_at"])
 
     reply_to = None
     if row["reply_id"]:
@@ -541,6 +555,7 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
                 "tgUsername":      row["reply_tg_username"],
                 "displayName":     row["reply_display_name"] or row["reply_first_name"] or row["reply_tg_username"],
                 "profileUsername": row["reply_profile_username"] or row["reply_tg_username"],
+                "userId":          row["reply_user_id"],
             },
         }
 
@@ -561,6 +576,7 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
             "tgUsername":      row["tg_username"],
             "displayName":     row["display_name"] or row["first_name"] or row["tg_username"],
             "profileUsername": row["profile_username"] or row["tg_username"],
+            "userId":          row["author_user_id"],
             "avatarUrl":       avatar_url,
             "avatarPreviewUrl": avatar_preview_url,
             "isPremium":       bool(row["author_premium"]),
@@ -587,7 +603,7 @@ async def fetch_post_extras(conn: aiosqlite.Connection, post_id: int, viewer: st
 
 
 def build_comment_response(row: aiosqlite.Row, viewer: str, likes_count: int, my_like: bool) -> dict:
-    avatar_url, avatar_preview_url = avatar_urls(row["tg_username"], row["author_avatar_path"], row["updated_at"])
+    avatar_url, avatar_preview_url = avatar_urls(row["profile_username"] or row["tg_username"], row["author_avatar_path"], row["updated_at"])
 
     return {
         "id":         row["id"],

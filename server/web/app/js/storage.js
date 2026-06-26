@@ -2,10 +2,10 @@
 
 const POSTS_KEY   = 'bouston_posts';
 const PROFILE_KEY = 'bouston_profile';
-const FEED_CACHE_KEY = 'bouston_feed_posts_cache';
-const PROFILE_POSTS_CACHE_KEY = 'bouston_profile_posts_cache';
+const FEED_CACHE_KEY = 'bouston_feed_posts_cache_v3';
+const PROFILE_POSTS_CACHE_KEY = 'bouston_profile_posts_cache_v3';
 const PROFILE_CACHE_TTL = 10 * 60 * 1000;
-const USER_PROFILES_KEY = 'bouston_user_profiles_cache';
+const USER_PROFILES_KEY = 'bouston_user_profiles_cache_v3';
 const DEFAULT_PROFILE = {
   name: 'Bouston', username: '', bio: '',
   avatar: null, avatarPreview: null, banner: null, bannerPreview: null, verified: false,

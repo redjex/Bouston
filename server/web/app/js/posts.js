@@ -1842,8 +1842,13 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   el.className = 'post post--enter' + extra;
   if (post.replyTo) el.classList.add('post--has-reply');
   el.dataset.postId = post.id;
-  if (post.author) el.dataset.author = post.author.tgUsername;
-  else if (window._tgUsername) el.dataset.author = window._tgUsername;
+  if (post.author) {
+    el.dataset.author = post.author.tgUsername;
+    el.dataset.profileAuthor = post.author.profileUsername || post.author.tgUsername;
+  } else if (window._tgUsername) {
+    el.dataset.author = window._tgUsername;
+    el.dataset.profileAuthor = getProfile().username || window._tgUsername;
+  }
 
   const delay = (i % 5) * 50;
   el.style.animationDelay = delay + 'ms';

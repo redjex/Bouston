@@ -1313,43 +1313,43 @@ body.no-verified-gradients .post__verified-bg {
 	 z-index: 0;
 }
 .post--verified-tall .post__verified-bg {
-	 top: -34%;
+	 top: -48%;
 	 left: -29%;
 	 width: 124%;
-	 height: 190%;
+	 height: 230%;
 	 transform: none;
 }
 .post--has-reply.post--verified .post__verified-bg {
 	 opacity: 0.92;
-	 top: -18%;
+	 top: -24%;
 	 bottom: auto;
 	 left: -35%;
 	 width: 142%;
-	 height: 142%;
+	 height: 160%;
 	 transform: none;
 }
 .post--has-reply.post--verified-tall .post__verified-bg {
-	 top: -34%;
+	 top: -48%;
 	 bottom: auto;
 	 left: -35%;
 	 width: 142%;
-	 height: 170%;
+	 height: 220%;
 	 transform: none;
 }
  .post--editing.post--verified .post__verified-bg {
-	 top: -34%;
+	 top: -48%;
 	 bottom: auto;
 	 left: -28%;
 	 width: 122%;
-	 height: 178%;
+	 height: 220%;
 	 transform: none;
 }
 .post--editing.post--has-reply.post--verified .post__verified-bg {
-	 top: -34%;
+	 top: -48%;
 	 bottom: auto;
 	 left: -35%;
 	 width: 142%;
-	 height: 170%;
+	 height: 220%;
 	 transform: none;
 }
  .post__header {

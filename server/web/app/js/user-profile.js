@@ -4,8 +4,9 @@ let _userProfileFrom = 'feed';
 const USER_PROFILE_PAGE = 10;
 
 function _renderUserCard(info) {
-  document.getElementById('up-name').textContent     = info.display_name || info.displayName || info.tgUsername || '';
-  document.getElementById('up-username').textContent = '@' + (info.profile_username || info.profileUsername || info.tgUsername || '');
+  const publicUsername = info.profile_username || info.profileUsername || info.username || info.tgUsername || '';
+  document.getElementById('up-name').textContent     = info.display_name || info.displayName || publicUsername || '';
+  document.getElementById('up-username').textContent = '@' + publicUsername;
   document.getElementById('up-bio').textContent      = info.bio || '';
 
   const badge = document.getElementById('up-verified-badge');
@@ -154,10 +155,11 @@ document.addEventListener('click', e => {
   const isHandle = e.target.closest('.post__handle');
   if (!isAvatar && !isName && !isHandle) return;
 
-  const author = postEl.dataset.author;
+  const author = postEl.dataset.profileAuthor || postEl.dataset.author;
+  const tgAuthor = postEl.dataset.author;
   if (!author) return;
 
-  if (author === window._tgUsername) {
+  if (tgAuthor === window._tgUsername) {
     showView('profile');
     return;
   }

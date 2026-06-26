@@ -396,7 +396,7 @@ document.getElementById('confirm-logout-yes').addEventListener('click', () => {
 });
 
 document.getElementById('input-username-profile').addEventListener('input', function () {
-  let val = this.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
+  let val = this.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
   if (!val) { this.value = ''; return; }
   this.value = '@' + val;
   const pos = this.value.length;
@@ -432,6 +432,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   if (newUser) {
     if (newUser.length < 3) { showFieldError('input-username-profile', 'Минимум 3 символа'); return; }
     if (newUser.length > 20) { showFieldError('input-username-profile', 'Максимум 20 символов'); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(newUser)) { showFieldError('input-username-profile', 'Только буквы, цифры и _'); return; }
   }
   clearFieldError('input-username-profile');
 
