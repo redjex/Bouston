@@ -14,7 +14,12 @@ EMOJI_DIR   = BASE_DIR / "img" / "emoji"
 
 @router.get("/")
 async def root():
-    return RedirectResponse(url="/app", status_code=302)
+    return RedirectResponse(url="/web/main/index.html", status_code=302)
+
+
+@router.get("/rule")
+async def rule_page():
+    return RedirectResponse(url="/web/main/rule.html", status_code=302)
 
 
 @router.get("/app")

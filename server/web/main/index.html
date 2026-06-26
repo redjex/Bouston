@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bouston</title>
+  <meta name="description" content="Bouston - спокойное пространство для публикаций, профилей и общения." />
+  <link rel="icon" href="../app/img/icons/logo.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar" aria-label="Навигация">
+    <a class="brand-mark" href="/" aria-label="Bouston">
+      <img src="img/logo_white.png" alt="" />
+    </a>
+    <nav class="nav">
+      <a href="/app">Войти</a>
+      <a href="/rule">Правило</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-label="Bouston">
+      <video
+        class="hero__video"
+        id="scroll-video"
+        muted
+        playsinline
+        preload="auto"
+      >
+        <source src="img/liberty.mp4" type="video/mp4" />
+      </video>
+      <div class="hero__shade" aria-hidden="true"></div>
+      <div class="hero__center">
+        <h1>Bouston</h1>
+      </div>
+    </section>
+
+    <section class="intro">
+      <h2>Мы боремся за пространство, где можно говорить свободно.</h2>
+      <p>
+        Bouston строится вокруг анонимности, личных границ и свободного обмена
+        мнениями. Здесь интерфейс не пытается забрать лишнее внимание и не требует
+        больше данных, чем нужно для участия.
+      </p>
+      <div class="actions">
+        <a class="button button--primary" href="/app">Открыть приложение</a>
+      </div>
+    </section>
+
+    <section class="features" aria-label="Возможности">
+      <article>
+        <span>01</span>
+        <h3>Публикации</h3>
+        <p>Текст, фото и видео собираются в аккуратной ленте с быстрыми реакциями.</p>
+      </article>
+      <article>
+        <span>02</span>
+        <h3>Профили</h3>
+        <p>Личная страница показывает аватар, посты, закрепы и основную активность.</p>
+      </article>
+      <article>
+        <span>03</span>
+        <h3>Диалоги</h3>
+        <p>Комментарии и ответы остаются рядом с публикацией, без лишних переходов.</p>
+      </article>
+    </section>
+
+    <section class="details" aria-label="Рейтинг принципов Bouston">
+      <div class="details__heading">
+        <h2>Что для Bouston важнее всего.</h2>
+      </div>
+      <div class="principle-chart">
+        <svg class="principle-chart__svg" viewBox="20 0 690 270" role="img" aria-label="График принципов Bouston">
+          <path class="chart-grid" d="M48 64H672M48 126H672M48 188H672M48 250H672" />
+          <path class="chart-area" d="M70 58 C150 62 190 74 236 82 C302 94 340 126 402 140 C488 160 526 186 650 194 L650 250 L70 250 Z" />
+          <path class="chart-line" d="M70 58 C150 62 190 74 236 82 C302 94 340 126 402 140 C488 160 526 186 650 194" />
+          <g class="chart-point" transform="translate(70 58)">
+            <circle r="7" />
+            <text x="-14" y="-18">98</text>
+          </g>
+          <g class="chart-point" transform="translate(236 82)">
+            <circle r="7" />
+            <text x="-14" y="-18">94</text>
+          </g>
+          <g class="chart-point" transform="translate(402 140)">
+            <circle r="7" />
+            <text x="-14" y="-18">87</text>
+          </g>
+          <g class="chart-point" transform="translate(650 194)">
+            <circle r="7" />
+            <text x="-14" y="-18">82</text>
+          </g>
+        </svg>
+        <div class="principle-chart__labels">
+          <span>Анонимность</span>
+          <span>Свобода слова</span>
+          <span>Чистый интерфейс</span>
+          <span>Ответственность</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="open-source" aria-label="Открытый код">
+      <div class="open-source__head">
+        <h2>Исходный код открыт.</h2>
+        <p>Bouston можно изучать, проверять и дорабатывать. Клиентская часть и API разделены по репозиториям, чтобы проект было проще читать и развивать.</p>
+      </div>
+      <div class="repo-grid">
+        <a class="repo-card" href="https://github.com/redjex/Bouston" target="_blank" rel="noopener">
+          <span>01</span>
+          <h3>Клиент</h3>
+          <p>Главный сайт, интерфейс приложения и базовая структура Bouston.</p>
+          <strong>github.com/redjex/Bouston</strong>
+        </a>
+        <a class="repo-card" href="https://github.com/inmyuse/BoustonAPI" target="_blank" rel="noopener">
+          <span>02</span>
+          <h3>Сервер</h3>
+          <p>API, авторизация и серверная логика для работы приложения.</p>
+          <strong>github.com/inmyuse/BoustonAPI</strong>
+        </a>
+      </div>
+    </section>
+
+    <section class="final">
+      <div>
+        <h2>Одно жесткое ограничение, без серой зоны.</h2>
+      </div>
+      <a class="button button--primary" href="/rule">Открыть правило</a>
+    </section>
+  </main>
+
+  <div class="page-steps" aria-hidden="true">
+    <span class="page-step page-step--level-0"></span>
+    <span class="page-step"></span>
+    <span class="page-step"></span>
+    <span class="page-step"></span>
+    <span class="page-step"></span>
+    <span class="page-step"></span>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
