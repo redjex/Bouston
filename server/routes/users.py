@@ -325,14 +325,14 @@ async def search_app(q: str = "", page: int = 1, limit: int = 10, request: Reque
             WHERE COALESCE(banned, 0) = 0
               AND (
                 LOWER(COALESCE(profile_username, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(username) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(display_name, first_name, '')) LIKE ? ESCAPE '\\'
               )
             ORDER BY
               CASE
                 WHEN LOWER(COALESCE(profile_username, '')) = ? THEN 0
-                WHEN LOWER(username) = ? THEN 1
+                WHEN LOWER(COALESCE(display_name, first_name, '')) = ? THEN 1
                 WHEN LOWER(COALESCE(profile_username, '')) LIKE ? ESCAPE '\\' THEN 2
-                WHEN LOWER(username) LIKE ? ESCAPE '\\' THEN 3
+                WHEN LOWER(COALESCE(display_name, first_name, '')) LIKE ? ESCAPE '\\' THEN 3
                 ELSE 4
               END,
               updated_at DESC

@@ -1,10 +1,15 @@
 import asyncio
 import base64
+import html
 import io
 import json
+import re
 import shutil
 import subprocess
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -34,6 +39,7 @@ IMAGE_EXTS = {"jpg", "jpeg", "png", "webp"}
 VIDEO_EXTS = {"mp4", "webm", "mov"}
 PREVIEW_DIR = POSTS_IMG_DIR / "previews"
 PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
+LINK_PREVIEW_UA = "BoustonBot/1.0 (+https://bouston.xyz)"
 
 
 def _media_ext_from_header(header: str) -> str:
@@ -44,6 +50,118 @@ def _media_ext_from_header(header: str) -> str:
     if "webm" in header: return "webm"
     if "quicktime" in header or "mov" in header: return "mov"
     return "jpg"
+
+
+def _host_matches(host: str, domain: str) -> bool:
+    host = host.lower().strip(".")
+    return host == domain or host.endswith("." + domain)
+
+
+def _link_preview_provider(host: str) -> str | None:
+    if _host_matches(host, "youtube.com") or _host_matches(host, "youtu.be"):
+        return "YouTube"
+    if _host_matches(host, "tiktok.com"):
+        return "TikTok"
+    if _host_matches(host, "instagram.com"):
+        return "Instagram"
+    return None
+
+
+def _youtube_video_id(url: str) -> str | None:
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.hostname or ""
+    if _host_matches(host, "youtu.be"):
+        return parsed.path.strip("/").split("/", 1)[0] or None
+    if _host_matches(host, "youtube.com"):
+        if parsed.path.startswith("/shorts/") or parsed.path.startswith("/embed/"):
+            parts = [p for p in parsed.path.split("/") if p]
+            return parts[1] if len(parts) > 1 else None
+        qs = urllib.parse.parse_qs(parsed.query)
+        return (qs.get("v") or [None])[0]
+    return None
+
+
+def _meta_attrs(tag: str) -> dict[str, str]:
+    attrs = {}
+    for key, value in re.findall(r'([a-zA-Z_:.-]+)\s*=\s*(".*?"|\'.*?\'|[^\s>]+)', tag):
+        attrs[key.lower()] = html.unescape(value.strip("\"'"))
+    return attrs
+
+
+def _extract_link_meta(markup: str) -> dict[str, str]:
+    meta = {}
+    for tag in re.findall(r"<meta\b[^>]*>", markup, flags=re.I):
+        attrs = _meta_attrs(tag)
+        key = (attrs.get("property") or attrs.get("name") or "").lower()
+        content = attrs.get("content") or ""
+        if key and content:
+            meta[key] = content.strip()
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", markup, flags=re.I | re.S)
+    if title_match:
+        meta["title"] = html.unescape(re.sub(r"\s+", " ", title_match.group(1)).strip())
+    return meta
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _fetch_link_preview(url: str) -> dict:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(400, "Unsupported URL")
+
+    host = parsed.hostname.lower()
+    provider = _link_preview_provider(host)
+    if not provider:
+        raise HTTPException(400, "Unsupported URL")
+
+    clean_url = urllib.parse.urlunparse(parsed._replace(fragment=""))
+    video_id = _youtube_video_id(clean_url)
+    fallback_title = provider
+    fallback_image = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else ""
+    embed_url = f"https://www.youtube-nocookie.com/embed/{video_id}" if video_id else ""
+
+    meta = {}
+    if video_id:
+        try:
+            oembed_url = "https://www.youtube.com/oembed?" + urllib.parse.urlencode({"url": clean_url, "format": "json"})
+            req = urllib.request.Request(oembed_url, headers={"User-Agent": LINK_PREVIEW_UA, "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=4) as res:
+                payload = json.loads(res.read(65536).decode("utf-8", errors="ignore"))
+                meta["og:title"] = payload.get("title") or ""
+                meta["og:image"] = payload.get("thumbnail_url") or fallback_image
+        except (urllib.error.URLError, TimeoutError, UnicodeError, OSError, json.JSONDecodeError):
+            pass
+
+    try:
+        req = urllib.request.Request(clean_url, headers={"User-Agent": LINK_PREVIEW_UA, "Accept": "text/html,*/*;q=0.8"})
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(req, timeout=4) as res:
+            content_type = res.headers.get("Content-Type", "")
+            if "text/html" in content_type or "application/xhtml" in content_type or not content_type:
+                raw = res.read(262144)
+                charset = res.headers.get_content_charset() or "utf-8"
+                html_meta = _extract_link_meta(raw.decode(charset, errors="ignore"))
+                meta = {**html_meta, **meta}
+    except (urllib.error.URLError, TimeoutError, UnicodeError, OSError):
+        meta = {}
+
+    title = meta.get("og:title") or meta.get("twitter:title") or meta.get("title") or fallback_title
+    description = meta.get("og:description") or meta.get("twitter:description") or ""
+    image = meta.get("og:image") or meta.get("twitter:image") or fallback_image
+    if image:
+        image = urllib.parse.urljoin(clean_url, image)
+
+    return {
+        "provider": provider,
+        "url": clean_url,
+        "title": title[:180],
+        "description": description[:220],
+        "image": image,
+        "embedUrl": embed_url,
+    }
 
 
 def _save_image_preview(raw: bytes, stem: str, ext: str) -> str | None:
@@ -152,6 +270,11 @@ async def get_post(post_id: int, request: Request = None):
             raise HTTPException(404, "Пост не найден")
         reactions, my_reactions, comment_count = await fetch_post_extras(conn, row["id"], viewer)
         return build_post_response(row, viewer, reactions, my_reactions, comment_count)
+
+
+@router.get("/api/link-preview")
+async def get_link_preview(url: str):
+    return await asyncio.to_thread(_fetch_link_preview, url)
 
 
 @router.post("/posts")

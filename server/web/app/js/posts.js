@@ -1036,6 +1036,179 @@ function linkifyTextHtml(text, linkClass = 'post__link') {
   });
   return holder.innerHTML;
 }
+const LINK_PREVIEW_CACHE_KEY = 'bouston_link_preview_cache_v3';
+const _linkPreviewMemory = new Map();
+
+function readLinkPreviewCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LINK_PREVIEW_CACHE_KEY) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLinkPreviewCache(url, data) {
+  if (!url || !data) return;
+  const cache = readLinkPreviewCache();
+  cache[url] = { data, cachedAt: Date.now() };
+  const entries = Object.entries(cache).slice(-40);
+  localStorage.setItem(LINK_PREVIEW_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+}
+
+function getCachedLinkPreview(url) {
+  if (_linkPreviewMemory.has(url)) return _linkPreviewMemory.get(url);
+  const entry = readLinkPreviewCache()[url];
+  if (!entry || Date.now() - entry.cachedAt > 7 * 24 * 60 * 60 * 1000) return null;
+  _linkPreviewMemory.set(url, entry.data);
+  return entry.data;
+}
+
+function extractPreviewUrl(text) {
+  const value = String(text || '');
+  const urlRe = /((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?:\/[^\s<>"']*)?)/gi;
+  let match;
+  while ((match = urlRe.exec(value)) !== null) {
+    const clean = match[0].replace(/[),.!?;:]+$/g, '');
+    const href = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    try {
+      const url = new URL(href);
+      const host = url.hostname.toLowerCase();
+      if (/(^|\.)youtube\.com$/.test(host) || host === 'youtu.be' || /(^|\.)tiktok\.com$/.test(host) || /(^|\.)instagram\.com$/.test(host)) {
+        url.hash = '';
+        return url.toString();
+      }
+    } catch {}
+  }
+  return '';
+}
+
+function getYoutubeId(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'youtu.be') return parsed.pathname.replace(/^\/+/, '').split('/')[0] || '';
+    if (/(^|\.)youtube\.com$/.test(host)) {
+      if (parsed.pathname.startsWith('/shorts/') || parsed.pathname.startsWith('/embed/')) {
+        return parsed.pathname.split('/').filter(Boolean)[1] || parsed.pathname.split('/').filter(Boolean)[0] || '';
+      }
+      return parsed.searchParams.get('v') || '';
+    }
+  } catch {}
+  return '';
+}
+
+function makeLocalLinkPreview(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const youtubeId = getYoutubeId(url);
+    if (youtubeId) {
+      return {
+        provider: 'YouTube',
+        url,
+        title: 'Видео YouTube',
+        description: url.replace(/^https?:\/\//i, ''),
+        image: `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+        embedUrl: `https://www.youtube-nocookie.com/embed/${youtubeId}`,
+      };
+    }
+    if (/(^|\.)tiktok\.com$/.test(host)) {
+      return { provider: 'TikTok', url, title: 'TikTok', description: url.replace(/^https?:\/\//i, ''), image: '', embedUrl: '' };
+    }
+    if (/(^|\.)instagram\.com$/.test(host)) {
+      return { provider: 'Instagram', url, title: 'Instagram', description: url.replace(/^https?:\/\//i, ''), image: '', embedUrl: '' };
+    }
+  } catch {}
+  return null;
+}
+
+async function fetchLinkPreview(url) {
+  const cached = getCachedLinkPreview(url);
+  if (cached) return cached;
+  const local = makeLocalLinkPreview(url);
+  const res = await apiFetch(`${API}/api/link-preview?url=${encodeURIComponent(url)}`);
+  if (!res.ok) throw new Error('preview failed');
+  const data = { ...(local || {}), ...(await res.json()) };
+  _linkPreviewMemory.set(url, data);
+  saveLinkPreviewCache(url, data);
+  return data;
+}
+
+function renderLinkPreviewCard(container, data) {
+  if (!container || !data?.url) return;
+  const title = data.title && data.title !== data.provider ? data.title : data.url;
+  const description = data.description || data.url;
+  const a = document.createElement('a');
+  a.className = 'link-preview';
+  if (data.provider === 'YouTube') a.classList.add('link-preview--youtube');
+  a.href = data.url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+
+  const media = document.createElement('span');
+  media.className = 'link-preview__media';
+  if (data.image) {
+    const img = document.createElement('img');
+    img.src = data.image;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    media.appendChild(img);
+    if (data.embedUrl) {
+      const play = document.createElement('img');
+      play.className = 'link-preview__play';
+      play.src = '/appimg/play.svg';
+      play.alt = '';
+      play.setAttribute('aria-hidden', 'true');
+      media.appendChild(play);
+    }
+  } else {
+    media.classList.add('link-preview__media--empty');
+    media.textContent = (data.provider || 'Link').slice(0, 2);
+  }
+
+  const body = document.createElement('span');
+  body.className = 'link-preview__body';
+  const provider = document.createElement('span');
+  provider.className = 'link-preview__provider';
+  provider.textContent = data.provider || new URL(data.url).hostname;
+  const heading = document.createElement('strong');
+  heading.textContent = title;
+  const desc = document.createElement('span');
+  desc.textContent = description;
+
+  body.append(provider, heading, desc);
+  a.append(media, body);
+  container.replaceChildren(a);
+}
+
+function mountPostLinkPreview(postEl, text) {
+  const wrap = postEl.querySelector('.post__link-preview-wrap');
+  if (!wrap) return;
+  const url = extractPreviewUrl(text);
+  if (!url) { wrap.remove(); return; }
+  wrap.innerHTML = '<div class="link-preview link-preview--loading"><span></span><span></span></div>';
+  const local = makeLocalLinkPreview(url);
+  if (local) renderLinkPreviewCard(wrap, local);
+  requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
+  fetchLinkPreview(url)
+    .then(data => {
+      if (!wrap.isConnected) return;
+      renderLinkPreviewCard(wrap, data);
+      requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
+    })
+    .catch(() => {
+      if (!wrap.isConnected) return;
+      const fallback = makeLocalLinkPreview(url);
+      if (fallback) {
+        renderLinkPreviewCard(wrap, fallback);
+        requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
+      } else {
+        wrap.remove();
+      }
+    });
+}
 function getHandle(profile) {
   const u = profile.username || profile.name || '';
   return '@' + u.toLowerCase().replace(/\s+/g,'');
@@ -1170,10 +1343,12 @@ function refreshPostLayoutFlags(postEl) {
     textTall ||
     !!postEl.querySelector('.post__pinned') ||
     !!postEl.querySelector('.post__images') ||
+    !!postEl.querySelector('.link-preview') ||
     !!postEl.querySelector('.post-reply') ||
     (footerEl && footerEl.offsetHeight > 44)
   );
   postEl.classList.toggle('post--text-tall', textTall);
+  postEl.classList.toggle('post--has-link-preview', !!postEl.querySelector('.link-preview'));
   postEl.classList.toggle('post--verified-tall', verifiedTall);
 }
 
@@ -1902,6 +2077,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     </div>
     ${post.replyTo ? buildReplyPreviewHtml(post.replyTo) : ''}
     ${post.text ? `<div class="post__text-wrap"></div>` : ''}
+    ${post.text ? `<div class="post__link-preview-wrap"></div>` : ''}
     ${post.images && post.images.length ? `
     <div class="post__images post__images--${Math.min(post.images.length, 4)}">
       ${post.images.slice(0, 4).map(m => {
@@ -1933,6 +2109,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   el.querySelector('.post__reactions').replaceWith(buildReactionsEl(post));
   const textWrap = el.querySelector('.post__text-wrap');
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
+  mountPostLinkPreview(el, post.text || '');
   el.querySelector('.post-reply')?.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
