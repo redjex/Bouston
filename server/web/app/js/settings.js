@@ -349,10 +349,10 @@ async function renderPrivacySessions(current = getCurrentAccountSnapshot()) {
     const lastSeenAt = session.lastSeenAt || session.last_seen_at || createdAt;
     const isActive = session.active !== false && !session.revokedAt;
     const isPhone = /Android|iOS|Телефон/i.test(session.device || session.type || '');
-    const iconName = isPhone ? 'smartphone' : 'computer';
+    const iconSrc = isPhone ? '/appimg/phone.svg' : '/appimg/pc.svg';
     row.className = 'login-session' + (session.current ? ' login-session--current' : '');
     row.innerHTML = `
-      <span class="login-session__icon material-symbols-outlined">${iconName}</span>
+      <span class="login-session__icon"><img src="${iconSrc}" alt="" /></span>
       <span class="login-session__body">
         <span class="login-session__device">${escSettings(session.device || 'Устройство')}${session.current ? '<span class="login-session__status">Сейчас</span>' : ''}</span>
         <span class="login-session__meta">Вход: ${escSettings(formatLoginTime(createdAt))}</span>

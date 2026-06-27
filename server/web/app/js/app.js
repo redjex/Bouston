@@ -157,7 +157,7 @@ function updateProfileStickyCard() {
 function warmUpInterface() {
   const run = () => {
     loadEmojiList?.().catch?.(() => {});
-    ['/appimg/up.svg', '/appimg/settings.svg', '/appimg/comments.svg', '/appimg/search.svg', '/appimg/default_avatar.png'].forEach(src => {
+    ['/appimg/up.svg', '/appimg/phone.svg', '/appimg/pc.svg', '/appimg/settings.svg', '/appimg/comments.svg', '/appimg/search.svg', '/appimg/default_avatar.png'].forEach(src => {
       const img = new Image();
       img.src = src;
     });
