@@ -3776,20 +3776,22 @@ body.no-verified-gradients .post__verified-bg {
 
 	.post--has-link-preview.post--verified .post__verified-bg,
 	.post--has-link-preview.post--verified-tall .post__verified-bg {
-		top: -16%;
-		left: -54%;
-		width: 184%;
-		height: 138%;
-		min-height: 560px;
+		top: -12%;
+		left: -42%;
+		width: 164%;
+		height: 148%;
+		min-height: 0;
+		opacity: 0.96;
 	}
 
 	.post--has-link-preview.post--has-reply.post--verified .post__verified-bg,
 	.post--has-link-preview.post--has-reply.post--verified-tall .post__verified-bg {
-		top: -20%;
-		left: -58%;
-		width: 194%;
-		height: 150%;
-		min-height: 620px;
+		top: -18%;
+		left: -46%;
+		width: 172%;
+		height: 158%;
+		min-height: 0;
+		opacity: 0.96;
 	}
 
 	.post--menu-open {
