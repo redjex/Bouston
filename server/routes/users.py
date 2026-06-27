@@ -19,9 +19,11 @@ from config import (
     USERNAME_RE,
 )
 from database import (
+    POSTS_QUERY,
+    build_post_response,
     avatar_urls, db_create_auth_session, db_get_user, db_list_auth_sessions, ensure_avatar_low,
     db_is_hardban_blocked, db_revoke_auth_session, db_set_registered, db_upsert_user,
-    save_avatar_image,
+    fetch_post_extras, save_avatar_image,
 )
 from models import SendCodeRequest, UpdateCustomizationRequest, UpdateProfileRequest, UserInfoRequest, VerifyCodeRequest
 from sse import broadcast_event
@@ -32,6 +34,27 @@ WALLPAPERS_DIR = IMG_DIR / "wallpapers"
 WALLPAPERS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_AVATAR_URL = "/appimg/default_avatar.png"
 DEFAULT_BANNER_URL = "/appimg/baner.png"
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+async def _viewer_from_request(request: Request | None) -> str:
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    if not auth_header.startswith("Bearer "):
+        return ""
+    try:
+        payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
+        candidate = payload.get("sub", "")
+        session_id = payload.get("jti", "")
+        if candidate and session_id:
+            from database import db_touch_auth_session
+            if await db_touch_auth_session(session_id, candidate):
+                return candidate
+    except jwt.PyJWTError:
+        return ""
+    return ""
 
 
 async def _get_user_by_public_username(username: str):
@@ -81,6 +104,23 @@ def _customization_payload(user, username: str) -> dict:
         "gradient_color_1": user["gradient_color_1"] if "gradient_color_1" in user.keys() and user["gradient_color_1"] else "#4E7ADF",
         "gradient_color_2": user["gradient_color_2"] if "gradient_color_2" in user.keys() and user["gradient_color_2"] else "#144CCC",
         "wallpaper_url": wallpaper_url,
+    }
+
+
+def _user_search_payload(user) -> dict:
+    t = int(user["updated_at"] or 0)
+    public_username = user["profile_username"] or user["username"]
+    avatar_url, avatar_preview_url = avatar_urls(public_username, user["avatar_path"], t)
+    avatar_url = avatar_url or DEFAULT_AVATAR_URL
+    avatar_preview_url = avatar_preview_url or avatar_url
+    return {
+        "username": user["username"],
+        "display_name": user["display_name"] or user["first_name"] or user["username"],
+        "profile_username": public_username,
+        "bio": user["bio"],
+        "verified": bool(user["verified"]),
+        "avatar_url": avatar_url,
+        "avatar_preview_url": avatar_preview_url,
     }
 
 
@@ -260,6 +300,68 @@ async def revoke_auth_session(session_id: str, username: str = Depends(require_a
     if not await db_revoke_auth_session(username, session_id):
         raise HTTPException(404, "Сессия не найдена")
     return {"ok": True}
+
+
+@router.get("/api/search")
+async def search_app(q: str = "", page: int = 1, limit: int = 10, request: Request = None):
+    query = q.strip().lstrip("@")[:80]
+    if not query:
+        return {"users": [], "posts": [], "page": max(1, page), "hasMore": False}
+
+    page = max(1, page)
+    limit = max(1, min(limit, 20))
+    offset = (page - 1) * limit
+    lowered = query.lower()
+    like_any = f"%{_escape_like(lowered)}%"
+    like_prefix = f"{_escape_like(lowered)}%"
+    viewer = await _viewer_from_request(request)
+
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        users_cursor = await conn.execute(
+            """
+            SELECT *
+            FROM users
+            WHERE COALESCE(banned, 0) = 0
+              AND (
+                LOWER(COALESCE(profile_username, '')) LIKE ? ESCAPE '\\'
+                OR LOWER(username) LIKE ? ESCAPE '\\'
+              )
+            ORDER BY
+              CASE
+                WHEN LOWER(COALESCE(profile_username, '')) = ? THEN 0
+                WHEN LOWER(username) = ? THEN 1
+                WHEN LOWER(COALESCE(profile_username, '')) LIKE ? ESCAPE '\\' THEN 2
+                WHEN LOWER(username) LIKE ? ESCAPE '\\' THEN 3
+                ELSE 4
+              END,
+              updated_at DESC
+            LIMIT 5
+            """,
+            (like_any, like_any, lowered, lowered, like_prefix, like_prefix),
+        )
+        user_rows = await users_cursor.fetchall()
+
+        posts_cursor = await conn.execute(
+            POSTS_QUERY + """
+            WHERE LOWER(p.text) LIKE ? ESCAPE '\\'
+            ORDER BY p.created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (like_any, limit, offset),
+        )
+        post_rows = await posts_cursor.fetchall()
+        posts = []
+        for row in post_rows:
+            reactions, my_reactions, comment_count = await fetch_post_extras(conn, row["id"], viewer)
+            posts.append(build_post_response(row, viewer, reactions, my_reactions, comment_count))
+
+    return {
+        "users": [_user_search_payload(user) for user in user_rows],
+        "posts": posts,
+        "page": page,
+        "hasMore": len(posts) == limit,
+    }
 
 
 @router.get("/users/{username}")

@@ -6,6 +6,7 @@ let _routeSyncing = false;
 
 function routeForView(name) {
   if (name === 'profile') return '/profile';
+  if (name === 'search') return '/search';
   if (name === 'settings') return '/settings';
   if (name === 'user-profile') return window.location.pathname.startsWith('/u/') ? window.location.pathname + window.location.search : '/profile';
   return '/feed';
@@ -25,14 +26,21 @@ function showView(name, options = {}) {
   }
   _currentView = name;
   document.getElementById('view-feed').classList.toggle('view--active', name === 'feed');
+  document.getElementById('view-search').classList.toggle('view--active', name === 'search');
   document.getElementById('view-profile').classList.toggle('view--active', name === 'profile');
   document.getElementById('view-settings').classList.toggle('view--active', name === 'settings');
   document.getElementById('view-user-profile').classList.toggle('view--active', name === 'user-profile');
   document.getElementById('nav-home').classList.toggle('active', name === 'feed');
+  document.getElementById('nav-search').classList.toggle('active', name === 'search');
   document.getElementById('nav-profile').classList.toggle('active', name === 'profile');
   if (name === 'feed') {
     renderFeedPosts();
     setScrollTopVisible(_feedEl.scrollTop > 300);
+    document.getElementById('feed-search-bar').classList.toggle('visible', _feedEl.scrollTop > 90);
+  } else if (name === 'search') {
+    const searchUrl = options.url ? new URL(options.url, window.location.origin) : null;
+    renderSearch(searchUrl ? (searchUrl.searchParams.get('q') || '') : getSearchRouteQuery(), { reset: true });
+    setScrollTopVisible(document.getElementById('search-wrap').scrollTop > 300);
   } else if (name === 'profile') {
     renderProfile();
     renderProfilePosts();
@@ -52,6 +60,7 @@ function showView(name, options = {}) {
 }
 
 document.getElementById('nav-home').addEventListener('click', () => showView('feed'));
+document.getElementById('nav-search').addEventListener('click', () => showView('search'));
 document.getElementById('nav-profile').addEventListener('click', () => showView('profile'));
 
 document.querySelectorAll('[data-file-target]').forEach(btn => {
@@ -148,7 +157,7 @@ function updateProfileStickyCard() {
 function warmUpInterface() {
   const run = () => {
     loadEmojiList?.().catch?.(() => {});
-    ['/appimg/up.svg', '/appimg/settings.svg', '/appimg/comments.svg', '/appimg/default_avatar.png'].forEach(src => {
+    ['/appimg/up.svg', '/appimg/settings.svg', '/appimg/comments.svg', '/appimg/search.svg', '/appimg/default_avatar.png'].forEach(src => {
       const img = new Image();
       img.src = src;
     });
@@ -164,6 +173,14 @@ _feedEl.addEventListener('scroll', () => {
   if (_currentView === 'feed') {
     setScrollTopVisible(_feedEl.scrollTop > 300);
     document.getElementById('view-feed').classList.toggle('view--scrolled', _feedEl.scrollTop > 10);
+    document.getElementById('feed-search-bar').classList.toggle('visible', _feedEl.scrollTop > 90);
+  }
+});
+document.getElementById('search-wrap').addEventListener('scroll', () => {
+  if (_currentView === 'search') {
+    const searchWrap = document.getElementById('search-wrap');
+    setScrollTopVisible(searchWrap.scrollTop > 300);
+    document.getElementById('view-search').classList.toggle('view--scrolled', searchWrap.scrollTop > 10);
   }
 });
 _profileWrap.addEventListener('scroll', () => {
@@ -188,6 +205,7 @@ document.getElementById('user-profile-wrap').addEventListener('scroll', () => {
 });
 _scrollTopBtn.addEventListener('click', () => {
   if (_currentView === 'feed') _feedEl.scrollTo({ top: 0, behavior: 'smooth' });
+  else if (_currentView === 'search') document.getElementById('search-wrap').scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'profile') _profileWrap.scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'settings') document.getElementById('settings-wrap').scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'user-profile') document.getElementById('user-profile-wrap').scrollTo({ top: 0, behavior: 'smooth' });
@@ -331,6 +349,7 @@ function getRouteState() {
   const path = window.location.pathname;
   const params = new URLSearchParams(window.location.search);
   if (path === '/profile') return { view: 'profile' };
+  if (path === '/search') return { view: 'search', q: params.get('q') || '' };
   if (path === '/settings') return { view: 'settings' };
   if (path.startsWith('/u/')) return { view: 'user-profile', username: decodeURIComponent(path.slice('/u/'.length)) };
   return { view: 'feed', comments: Number(params.get('comments')) || null };

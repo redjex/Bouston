@@ -998,6 +998,44 @@ function showPostError(message, btnEl) {
 function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
+function createLinkedTextFragment(text, linkClass = 'post__link') {
+  const fragment = document.createDocumentFragment();
+  const value = String(text || '');
+  const urlRe = /(^|[^\w@./-])((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?:\/[^\s<>"']*)?)/gi;
+  let last = 0, match;
+
+  while ((match = urlRe.exec(value)) !== null) {
+    const prefix = match[1];
+    const raw = match[2];
+    const start = match.index + prefix.length;
+    const clean = raw.replace(/[),.!?;:]+$/g, '');
+    const trailing = raw.slice(clean.length);
+
+    if (start > last) fragment.appendChild(document.createTextNode(value.slice(last, start)));
+
+    const a = document.createElement('a');
+    a.className = linkClass;
+    a.href = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = clean;
+    fragment.appendChild(a);
+
+    if (trailing) fragment.appendChild(document.createTextNode(trailing));
+    last = start + raw.length;
+  }
+
+  if (last < value.length) fragment.appendChild(document.createTextNode(value.slice(last)));
+  return fragment;
+}
+function linkifyTextHtml(text, linkClass = 'post__link') {
+  const holder = document.createElement('div');
+  String(text || '').split('\n').forEach((line, index, lines) => {
+    holder.appendChild(createLinkedTextFragment(line, linkClass));
+    if (index < lines.length - 1) holder.appendChild(document.createElement('br'));
+  });
+  return holder.innerHTML;
+}
 function getHandle(profile) {
   const u = profile.username || profile.name || '';
   return '@' + u.toLowerCase().replace(/\s+/g,'');
@@ -1068,31 +1106,10 @@ function buildPostTextEl(text) {
     return p;
   }
 
-  function appendTextWithLinks(target, value) {
-    const urlRe = /((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
-    let last = 0, match;
-    while ((match = urlRe.exec(value)) !== null) {
-      const raw = match[0];
-      const clean = raw.replace(/[),.!?;:]+$/g, '');
-      const trailing = raw.slice(clean.length);
-      if (match.index > last) target.appendChild(document.createTextNode(value.slice(last, match.index)));
-      const a = document.createElement('a');
-      a.className = 'post__link';
-      a.href = clean.startsWith('www.') ? `https://${clean}` : clean;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = clean;
-      target.appendChild(a);
-      if (trailing) target.appendChild(document.createTextNode(trailing));
-      last = match.index + raw.length;
-    }
-    if (last < value.length) target.appendChild(document.createTextNode(value.slice(last)));
-  }
-
   // Р Р°Р·Р±РёРІР°РµРј С‚РµРєСЃС‚ РїРѕ РїРµСЂРµРЅРѕСЃР°Рј СЃС‚СЂРѕРє Рё РґРѕР±Р°РІР»СЏРµРј <br>
   const lines = text.split('\n');
   lines.forEach((line, index) => {
-    appendTextWithLinks(p, line);
+    p.appendChild(createLinkedTextFragment(line));
     if (index < lines.length - 1) {
       p.appendChild(document.createElement('br'));
     }

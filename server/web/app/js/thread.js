@@ -228,7 +228,7 @@ function buildCommentEl(c, isServer) {
         ${badgeHtml}
         ${c.isOwn ? `<button class="comment__menu-btn" aria-label="Меню"><span></span><span></span><span></span></button>` : ''}
       </div>
-      <p class="comment__text">${escapeHtml(c.text)}</p>
+      <p class="comment__text">${linkifyTextHtml(c.text)}</p>
       <div class="comment__footer">
         <button class="comment__like ${c.myLike ? 'comment__like--active' : ''}" data-id="${c.id}">
           <img src="/appimg/${c.myLike ? 'like.svg' : 'like_n.svg'}" alt="" />

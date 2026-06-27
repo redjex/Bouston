@@ -140,6 +140,7 @@ function closeUserProfile() {
 document.getElementById('btn-user-profile-back').addEventListener('click', closeUserProfile);
 
 document.getElementById('nav-home').addEventListener('click',    () => { _userProfileFrom = 'feed'; });
+document.getElementById('nav-search')?.addEventListener('click', () => { _userProfileFrom = 'search'; });
 document.getElementById('btn-profile-settings')?.addEventListener('click', () => { _userProfileFrom = 'settings'; });
 document.getElementById('nav-profile').addEventListener('click', () => { _userProfileFrom = 'profile'; });
 

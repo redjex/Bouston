@@ -5,14 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bouston</title>
   <base href="/web/app/" />
+  <link rel="icon" href="/web/app/img/icons/logo.ico" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Inter:wght@400;500;600;700&family=Special+Gothic+Expanded+One&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=computer,photo_camera,smartphone" />
-  <link rel="stylesheet" href="css/app.css?v=verified-svg-height-20260626-5" />
+  <link rel="stylesheet" href="css/app.css?v=search-user-hover-20260627-1" />
 </head>
 <body>
   <div id="view-feed" class="view view--active">
+    <form class="feed-search-bar" id="feed-search-bar">
+      <img src="/appimg/search.svg" alt="" />
+      <input id="feed-search-input" type="search" autocomplete="off" placeholder="Поиск по постам" />
+      <button class="search-clear" id="feed-search-clear" type="button" aria-label="Очистить поиск" hidden>
+        <img src="/appimg/close.svg" alt="" />
+      </button>
+    </form>
     <div class="feed" id="feed">
 
       <div class="compose">
@@ -34,6 +42,32 @@
       </div>
 
       <div id="posts-container"></div>
+    </div>
+  </div>
+
+  <div id="view-search" class="view">
+    <div class="search-wrap" id="search-wrap">
+      <form class="search-head" id="search-form">
+        <div class="search-box">
+          <img src="/appimg/search.svg" alt="" />
+          <input id="search-input" type="search" autocomplete="off" placeholder="Юзернейм или фраза из поста" />
+          <button class="search-clear" id="search-clear" type="button" aria-label="Очистить поиск" hidden>
+            <img src="/appimg/close.svg" alt="" />
+          </button>
+        </div>
+      </form>
+
+      <section class="search-section" id="search-users-section" hidden>
+        <div class="search-section__title">Пользователи</div>
+        <div class="search-users" id="search-users"></div>
+      </section>
+
+      <section class="search-section" id="search-posts-section" hidden>
+        <div class="search-section__title">Посты</div>
+        <div class="search-posts" id="search-posts"></div>
+      </section>
+
+      <p class="feed__empty" id="search-empty" hidden></p>
     </div>
   </div>
 
@@ -394,6 +428,9 @@
       <button class="nav-btn active" id="nav-home" title="Главная">
         <img class="nav-icon" src="/appimg/home.svg" alt="home" />
       </button>
+      <button class="nav-btn" id="nav-search" title="Search">
+        <img class="nav-icon" src="/appimg/search.svg" alt="search" />
+      </button>
       <button class="nav-btn" id="nav-profile" title="Профиль">
         <img class="nav-icon" src="/appimg/profile.svg" alt="profile" />
       </button>
@@ -410,12 +447,13 @@
   <script src="js/tgs.js?v=reactions-batch-20260621-4"></script>
   <script src="js/storage.js?v=public-assets-username-20260626-1"></script>
   <script src="js/notifications.js?v=audio-unlock-20260626-1"></script>
-  <script src="js/posts.js?v=verified-svg-height-20260626-5"></script>
+  <script src="js/posts.js?v=linkify-domains-20260627-1"></script>
   <script src="js/feed.js?v=rate-limit-sentinel-20260626-1"></script>
   <script src="js/profile.js?v=username-no-dots-20260626-1"></script>
-  <script src="js/thread.js?v=comment-retry-20260626-1"></script>
+  <script src="js/thread.js?v=linkify-domains-20260627-1"></script>
+  <script src="js/search.js?v=search-own-profile-20260627-1"></script>
   <script src="js/user-profile.js?v=public-profile-author-20260626-1"></script>
   <script src="js/settings.js?v=bot-only-controls-20260626-1"></script>
-  <script src="js/app.js?v=file-buttons-20260626-1"></script>
+  <script src="js/app.js?v=search-route-20260627-1"></script>
 </body>
 </html>

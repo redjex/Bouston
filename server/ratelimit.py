@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # ── Известные пути ботнетов/сканеров ─────────────────────────────────────────
 
 _BLOCK_EXACT = frozenset({
-    "/", "/index.html", "/admin", "/wp-login.php", "/wp-admin",
+    "/admin", "/wp-login.php", "/wp-admin",
     "/xmlrpc.php", "/shell", "/cmd", "/console", "/.env",
     "/.git/config", "/config.php", "/phpmyadmin", "/mips",
     "/mips64", "/mipsel", "/arm", "/arm7", "/i686", "/x86_64",
