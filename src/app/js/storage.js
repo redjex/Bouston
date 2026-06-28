@@ -74,15 +74,35 @@ function mergePostsById(existing = [], incoming = []) {
   return Array.from(map.values());
 }
 
+function getPostSortTime(post) {
+  const raw = post?.createdAt ?? post?.created_at ?? 0;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getPostSortId(post) {
+  const id = Number(post?.id ?? 0);
+  return Number.isFinite(id) ? id : 0;
+}
+
+function comparePostsByTimeAndId(a, b) {
+  const timeDiff = getPostSortTime(b) - getPostSortTime(a);
+  if (timeDiff) return timeDiff;
+  return getPostSortId(b) - getPostSortId(a);
+}
+
 function sortFeedPosts(posts) {
-  return [...posts].sort((a, b) => (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0));
+  return [...posts].sort(comparePostsByTimeAndId);
 }
 
 function sortProfilePosts(posts) {
   return [...posts].sort((a, b) => {
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
     if ((b.pinnedAt || 0) !== (a.pinnedAt || 0)) return (b.pinnedAt || 0) - (a.pinnedAt || 0);
-    return (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0);
+    return comparePostsByTimeAndId(a, b);
   });
 }
 
@@ -122,9 +142,9 @@ function reconcileFeedPostsCache(serverPosts, pageLimit = 20) {
   } else if (serverPosts.length < pageLimit) {
     next = next.filter(post => serverIds.has(Number(post.id)));
   } else {
-    const oldestServerTs = Math.min(...serverPosts.map(post => post.createdAt || post.id || 0));
+    const oldestServerTs = Math.min(...serverPosts.map(getPostSortTime));
     next = next.filter(post => {
-      const ts = post.createdAt || post.id || 0;
+      const ts = getPostSortTime(post);
       return ts < oldestServerTs || serverIds.has(Number(post.id));
     });
   }

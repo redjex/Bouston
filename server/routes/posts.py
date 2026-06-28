@@ -232,12 +232,12 @@ async def get_posts(
         conn.row_factory = aiosqlite.Row
         if author:
             cursor = await conn.execute(
-                POSTS_QUERY + "WHERE LOWER(p.tg_username) = ? OR LOWER(u.profile_username) = ? ORDER BY p.pinned DESC, p.pinned_at DESC, p.created_at DESC LIMIT ? OFFSET ?",
+                POSTS_QUERY + "WHERE LOWER(p.tg_username) = ? OR LOWER(u.profile_username) = ? ORDER BY p.pinned DESC, p.pinned_at DESC, p.created_at DESC, p.id DESC LIMIT ? OFFSET ?",
                 (normalize(author), normalize(author), limit, offset),
             )
         else:
             cursor = await conn.execute(
-                POSTS_QUERY + "ORDER BY p.created_at DESC LIMIT ? OFFSET ?",
+                POSTS_QUERY + "ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             )
         rows = await cursor.fetchall()

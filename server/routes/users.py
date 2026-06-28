@@ -345,7 +345,7 @@ async def search_app(q: str = "", page: int = 1, limit: int = 10, request: Reque
         posts_cursor = await conn.execute(
             POSTS_QUERY + """
             WHERE LOWER(p.text) LIKE ? ESCAPE '\\'
-            ORDER BY p.created_at DESC
+            ORDER BY p.created_at DESC, p.id DESC
             LIMIT ? OFFSET ?
             """,
             (like_any, limit, offset),

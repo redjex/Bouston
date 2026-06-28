@@ -3762,6 +3762,25 @@ body.no-verified-gradients .post__verified-bg {
 		font-size: 1.08rem;
 	}
 
+	.post--verified .post__verified-bg {
+		top: -30%;
+		left: -42%;
+		bottom: auto;
+		width: 166%;
+		height: 188%;
+		opacity: 0.94;
+		transform: none;
+	}
+
+	.post--verified-tall .post__verified-bg {
+		top: -36%;
+		left: -46%;
+		bottom: auto;
+		width: 176%;
+		height: 198%;
+		transform: none;
+	}
+
 	.post--has-reply.post--verified .post__verified-bg {
 		top: -18%;
 		left: -48%;

@@ -224,35 +224,35 @@ function handleDeletedPostsMissingFromDom(container) {
 }
 
 function syncFeedPostsIntoDom(container, posts) {
-  const missing = [];
+  if (!container || !Array.isArray(posts)) return;
 
   posts.forEach(post => {
     registerServerPost(post);
-    if (!findFeedPostEl(container, post.id)) missing.push(post);
   });
 
-  if (!missing.length) return;
+  const sentinel = container.querySelector('.feed-sentinel');
+  if (sentinel) sentinel.remove();
 
   container.querySelector('.feed__empty')?.remove();
   container.querySelectorAll('.post-skeleton').forEach(el => el.remove());
+  container.querySelectorAll('.date-separator').forEach(el => el.remove());
 
-  missing.forEach(post => {
-    const postEl = buildPostEl(post, null, null, false, '', 0, false);
-    postEl.classList.remove('post--enter');
+  const orderedIds = new Set(posts.map(post => Number(post.id)));
+  container.querySelectorAll('.post[data-post-id]').forEach(postEl => {
+    if (!orderedIds.has(Number(postEl.dataset.postId))) postEl.remove();
+  });
 
-    const postIndex = posts.findIndex(item => Number(item.id) === Number(post.id));
-    const nextPostEl = posts
-      .slice(postIndex + 1)
-      .map(item => findFeedPostEl(container, item.id))
-      .find(Boolean);
-    const sentinel = container.querySelector('.feed-sentinel');
-
-    if (nextPostEl) container.insertBefore(postEl, nextPostEl);
-    else if (sentinel) container.insertBefore(postEl, sentinel);
-    else container.appendChild(postEl);
+  posts.forEach((post, index) => {
+    let postEl = findFeedPostEl(container, post.id);
+    if (!postEl) {
+      postEl = buildPostEl(post, null, null, false, '', index, false);
+      postEl.classList.remove('post--enter');
+    }
+    container.appendChild(postEl);
   });
 
   normalizeFeedDateSeparators(container);
+  if (sentinel && !_feedDone) container.appendChild(sentinel);
   attachFeedMenu(container);
 }
 
