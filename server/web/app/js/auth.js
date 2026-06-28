@@ -3,7 +3,7 @@
     const API = '';
 
     if (localStorage.getItem('bouston_token')) {
-      window.location.href = '/web/app/app.html';
+      window.location.href = '/feed';
     }
 
     // Theme
@@ -76,6 +76,25 @@
       if (el) el.style.width = pct + '%';
     }
 
+    function getGpuRenderer() {
+      try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (!gl) return '';
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        return debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      } catch {
+        return '';
+      }
+    }
+
+    function getDeviceFingerprintPayload() {
+      return {
+        gpu_renderer: getGpuRenderer(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      };
+    }
+
     const usernameInput = document.getElementById('input-username');
 
     usernameInput.addEventListener('input', function () {
@@ -98,7 +117,7 @@
         const res = await fetch(`${API}/send-code`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username }),
+          body: JSON.stringify({ username, ...getDeviceFingerprintPayload() }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.detail || 'Ошибка сервера');
@@ -134,14 +153,14 @@
         const res = await fetch(`${API}/verify-code`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: _username, code }),
+          body: JSON.stringify({ username: _username, code, ...getDeviceFingerprintPayload() }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.detail || 'Неверный код');
         localStorage.setItem('bouston_token', data.token);
         localStorage.setItem('bouston_user', JSON.stringify(data.user));
         document.cookie = `bouston_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-        window.location.href = '/web/app/app.html';
+        window.location.href = '/feed';
       } catch (err) {
         showError('error-code', err.message);
       } finally {

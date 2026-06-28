@@ -349,10 +349,10 @@ async function renderPrivacySessions(current = getCurrentAccountSnapshot()) {
     const lastSeenAt = session.lastSeenAt || session.last_seen_at || createdAt;
     const isActive = session.active !== false && !session.revokedAt;
     const isPhone = /Android|iOS|Телефон/i.test(session.device || session.type || '');
-    const iconName = isPhone ? 'smartphone' : 'computer';
+    const iconSrc = isPhone ? '/appimg/phone.svg' : '/appimg/pc.svg';
     row.className = 'login-session' + (session.current ? ' login-session--current' : '');
     row.innerHTML = `
-      <span class="login-session__icon material-symbols-outlined">${iconName}</span>
+      <span class="login-session__icon"><img src="${iconSrc}" alt="" /></span>
       <span class="login-session__body">
         <span class="login-session__device">${escSettings(session.device || 'Устройство')}${session.current ? '<span class="login-session__status">Сейчас</span>' : ''}</span>
         <span class="login-session__meta">Вход: ${escSettings(formatLoginTime(createdAt))}</span>
@@ -455,7 +455,10 @@ document.getElementById('settings-wallpaper-input')?.addEventListener('change', 
   event.target.value = '';
 });
 document.getElementById('settings-wallpaper-action')?.addEventListener('click', event => {
-  if (!getCustomizationDraft().wallpaper) return;
+  if (!getCustomizationDraft().wallpaper) {
+    document.getElementById('settings-wallpaper-input')?.click();
+    return;
+  }
   event.preventDefault();
   _wallpaperSaveExtra = { clear_wallpaper: true };
   updateCustomizationDraft({ wallpaper: '' });
@@ -487,6 +490,7 @@ document.getElementById('settings-wallpaper-save')?.addEventListener('click', as
     setTimeout(() => { btn.textContent = 'Сохранить обои'; btn.disabled = false; }, 1200);
   }
 });
+
 document.getElementById('account-auth-cancel')?.addEventListener('click', () => {
   document.getElementById('account-auth-overlay')?.setAttribute('hidden', '');
 });

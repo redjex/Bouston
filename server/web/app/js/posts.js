@@ -185,6 +185,13 @@
 
   document.addEventListener('click', e => {
     if (e.target.closest('.lightbox__close') || e.target.closest('.lightbox__tool')) return;
+    const playControl = e.target.closest('.vplayer__control');
+    if (playControl) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleInlineVideo(playControl.closest('.vplayer'));
+      return;
+    }
     const vidWrap = e.target.closest('.post__video');
     if (vidWrap) {
       const { items, index } = collectPostItems(vidWrap);
@@ -373,17 +380,152 @@ function buildVideoPlayer(src, extraClass = '', fullSrc = src) {
   wrap.className = 'vplayer' + (extraClass ? ' ' + extraClass : '');
   wrap.dataset.src = src;
   wrap.dataset.fullSrc = fullSrc || src;
+  wrap.dataset.ready = '0';
 
   const vid = document.createElement('video');
   vid.className   = 'vplayer__video';
-  vid.src         = src;
+  vid.src          = fullSrc || src;
+  vid.poster      = src;
   vid.preload     = 'metadata';
   vid.muted       = true;
-  vid.loop        = true;
+  vid.loop        = false;
   vid.playsInline = true;
   wrap.appendChild(vid);
 
+  const control = document.createElement('button');
+  control.type = 'button';
+  control.className = 'vplayer__control vplayer__control--loading';
+  control.setAttribute('aria-label', 'Загрузка видео');
+  control.innerHTML = `
+    <span class="vplayer__spinner" aria-hidden="true"></span>
+    <img class="vplayer__play" src="/appimg/play.svg" alt="" aria-hidden="true" />
+    <img class="vplayer__stop" src="/appimg/stop.svg" alt="" aria-hidden="true" />
+  `;
+  wrap.appendChild(control);
+
+  vid.addEventListener('play', () => wrap.classList.add('vplayer--playing'));
+  vid.addEventListener('pause', () => wrap.classList.remove('vplayer--playing'));
+  vid.addEventListener('ended', () => {
+    wrap.classList.remove('vplayer--playing');
+    vid.currentTime = 0;
+  });
+
   return wrap;
+}
+
+function createMediaProgress() {
+  const el = document.createElement('div');
+  el.className = 'media-progress';
+  el.innerHTML = `
+    <svg class="media-progress__svg" viewBox="0 0 44 44" aria-hidden="true">
+      <circle class="media-progress__track" cx="22" cy="22" r="18"></circle>
+      <circle class="media-progress__bar" cx="22" cy="22" r="18"></circle>
+    </svg>
+    <span class="media-progress__text">0%</span>
+  `;
+  setMediaProgress(el, 0);
+  return el;
+}
+
+function setMediaProgress(el, value) {
+  if (!el) return;
+  const pct = Math.max(0, Math.min(100, Math.round(value || 0)));
+  el.style.setProperty('--media-progress', pct);
+  const text = el.querySelector('.media-progress__text');
+  if (text) text.textContent = pct + '%';
+}
+
+function loadMediaBlobWithProgress(url, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'blob';
+    xhr.onprogress = event => {
+      if (event.lengthComputable) onProgress((event.loaded / event.total) * 100);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(100);
+        resolve(URL.createObjectURL(xhr.response));
+      } else {
+        reject(new Error('media load failed'));
+      }
+    };
+    xhr.onerror = reject;
+    xhr.send();
+  });
+}
+
+function hydratePostImage(img) {
+  const fullSrc = img.dataset.fullSrc;
+  if (!fullSrc || fullSrc === img.src || img.dataset.loadingFull === '1') return;
+  img.dataset.loadingFull = '1';
+  img.classList.add('post__image--previewing');
+  const progress = createMediaProgress();
+  img.parentElement?.appendChild(progress);
+  loadMediaBlobWithProgress(fullSrc, pct => setMediaProgress(progress, pct))
+    .then(blobUrl => {
+      img.onload = () => {
+        img.classList.remove('post__image--previewing');
+        progress.remove();
+      };
+      img.src = blobUrl;
+    })
+    .catch(() => {
+      img.classList.remove('post__image--previewing');
+      progress.remove();
+    });
+}
+
+function hydratePostVideo(player) {
+  const vid = player.querySelector('.vplayer__video');
+  const fullSrc = player.dataset.fullSrc;
+  const control = player.querySelector('.vplayer__control');
+  if (!vid || !fullSrc || player.dataset.loadingFull === '1') return;
+  player.dataset.loadingFull = '1';
+  player.classList.add('vplayer--previewing');
+  if (control) {
+    control.classList.add('vplayer__control--loading');
+    control.setAttribute('aria-label', 'Загрузка видео');
+  }
+  loadMediaBlobWithProgress(fullSrc, () => {})
+    .then(blobUrl => {
+      vid.onloadedmetadata = () => {
+        vid.currentTime = 0;
+      };
+      vid.onloadeddata = () => {
+        player.classList.remove('vplayer--previewing');
+        player.dataset.ready = '1';
+        if (control) {
+          control.classList.remove('vplayer__control--loading');
+          control.setAttribute('aria-label', 'Включить видео');
+        }
+      };
+      vid.src = blobUrl;
+      vid.load();
+    })
+    .catch(() => {
+      player.classList.remove('vplayer--previewing');
+      player.dataset.ready = '1';
+      if (control) {
+        control.classList.remove('vplayer__control--loading');
+        control.setAttribute('aria-label', 'Включить видео');
+      }
+    });
+}
+
+function toggleInlineVideo(player) {
+  if (!player || player.dataset.ready !== '1') return;
+  const vid = player.querySelector('.vplayer__video');
+  if (!vid) return;
+  if (vid.paused) {
+    document.querySelectorAll('.vplayer__video').forEach(other => {
+      if (other !== vid && !other.paused) other.pause();
+    });
+    vid.play().catch(() => {});
+  } else {
+    vid.pause();
+  }
 }
 
 function mountVideoPlayers(container) {
@@ -391,7 +533,9 @@ function mountVideoPlayers(container) {
     const src = wrap.dataset.src;
     const player = buildVideoPlayer(src, 'post__video', wrap.dataset.fullSrc || src);
     wrap.replaceWith(player);
+    hydratePostVideo(player);
   });
+  container.querySelectorAll('.post__image[data-full-src]').forEach(hydratePostImage);
 }
 
 /* в”Ђв”Ђ Compose helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
@@ -426,12 +570,50 @@ function watchComposeEmpty(id) {
 /* в”Ђв”Ђ Compose photo в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 const _composeImages = { feed: [], profile: [] };
 const _composeReplyTargets = { feed: null, profile: null };
+let _selectedReplyPostEl = null;
 
 function getComposeImages(ns) { return _composeImages[ns] || []; }
 function clearComposeImages(ns) {
   _composeImages[ns] = [];
   const el = document.getElementById(`${ns}-compose-previews`);
   if (el) el.innerHTML = '';
+}
+
+function buildOptimisticPost(text, images = [], replyToPostId = null) {
+  const profile = getProfile();
+  const id = Date.now();
+  const replyTo = replyToPostId ? getPostById(Number(replyToPostId)) : null;
+  return {
+    id,
+    text,
+    createdAt: id,
+    images: images.map(m => ({ ...m })),
+    reactions: {},
+    myReactions: [],
+    likes: 0,
+    liked: false,
+    commentCount: 0,
+    isOwn: true,
+    pending: true,
+    replyTo: replyTo ? {
+      id: replyTo.id,
+      text: replyTo.text,
+      hasMedia: !!(replyTo.images && replyTo.images.length),
+      author: replyTo.author || {
+        displayName: profile.name,
+        profileUsername: profile.username,
+        tgUsername: window._tgUsername,
+      },
+    } : null,
+    author: {
+      displayName: profile.name,
+      profileUsername: profile.username,
+      tgUsername: window._tgUsername,
+      avatarUrl: profile.avatar,
+      avatarPreviewUrl: getProfileAvatarPreview(profile) || profile.avatar,
+      isVerified: profile.verified === true,
+    },
+  };
 }
 
 function getComposeReplyTargetId(ns) {
@@ -512,6 +694,10 @@ function renderComposeReplyTarget(ns) {
 function clearComposeReplyTarget(ns) {
   _composeReplyTargets[ns] = null;
   renderComposeReplyTarget(ns);
+  if (_selectedReplyPostEl) {
+    _selectedReplyPostEl.classList.remove('post--reply-selected');
+    _selectedReplyPostEl = null;
+  }
 }
 
 function setComposeReplyTarget(ns, postId) {
@@ -519,6 +705,9 @@ function setComposeReplyTarget(ns, postId) {
   if (!post) return;
   _composeReplyTargets[ns] = post;
   renderComposeReplyTarget(ns);
+  if (_selectedReplyPostEl) _selectedReplyPostEl.classList.remove('post--reply-selected');
+  _selectedReplyPostEl = document.querySelector(`.post[data-post-id="${Number(postId)}"]`);
+  _selectedReplyPostEl?.classList.add('post--reply-selected');
   const input = document.getElementById(`${ns}-compose-input`);
   input?.focus();
   input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -538,22 +727,32 @@ function initComposePhoto(ns) {
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
     const isVideo = file.type.startsWith('video/');
     const reader  = new FileReader();
+    const wrap = document.createElement('div');
+    wrap.className = 'compose__preview-wrap compose__preview-wrap--loading';
+    const progress = createMediaProgress();
+    wrap.appendChild(progress);
+    previews.appendChild(wrap);
+
+    reader.onprogress = e => {
+      if (e.lengthComputable) setMediaProgress(progress, (e.loaded / e.total) * 100);
+    };
     reader.onload = e => {
       const dataUrl = e.target.result;
       _composeImages[ns].push({ src: dataUrl, type: isVideo ? 'video' : 'image', mime: file.type });
-
-      const wrap = document.createElement('div');
-      wrap.className = 'compose__preview-wrap';
-
       if (isVideo) {
         const vid = document.createElement('video');
         vid.src = dataUrl; vid.muted = true; vid.playsInline = true;
-        wrap.appendChild(vid);
+        wrap.insertBefore(vid, progress);
       } else {
         const img = document.createElement('img');
         img.src = dataUrl;
-        wrap.appendChild(img);
+        wrap.insertBefore(img, progress);
       }
+      setMediaProgress(progress, 100);
+      setTimeout(() => {
+        wrap.classList.remove('compose__preview-wrap--loading');
+        progress.remove();
+      }, 180);
 
       const rm = document.createElement('button');
       rm.className = 'compose__preview-remove';
@@ -564,8 +763,8 @@ function initComposePhoto(ns) {
         wrap.remove();
       });
       wrap.appendChild(rm);
-      previews.appendChild(wrap);
     };
+    reader.onerror = () => wrap.remove();
     reader.readAsDataURL(file);
   }
 
@@ -670,34 +869,36 @@ watchComposeEmpty('profile-compose-input');
 
   document.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' || !window.matchMedia('(max-width: 640px)').matches) return;
-    if (e.target.closest('button, a, input, textarea, [contenteditable], .post__images, .vplayer')) return;
+    if (e.target.closest('button, a, input, textarea, [contenteditable]')) return;
     const el = e.target.closest('.post[data-post-id]');
     if (!el) return;
-    active = { el, id: el.dataset.postId, scope: getComposeScopeFromPostEl(el), x: e.clientX, y: e.clientY, dx: 0 };
+    active = { el, id: el.dataset.postId, scope: getComposeScopeFromPostEl(el), x: e.clientX, y: e.clientY, dx: 0, locked: false };
+    el.setPointerCapture?.(e.pointerId);
   }, { passive: true });
 
   document.addEventListener('pointermove', e => {
     if (!active) return;
     const dx = e.clientX - active.x;
     const dy = e.clientY - active.y;
-    if (Math.abs(dy) > 42 && Math.abs(dy) > Math.abs(dx)) { resetActive(); return; }
+    if (!active.locked && Math.abs(dy) > 42 && Math.abs(dy) > Math.abs(dx)) { resetActive(); return; }
     if (dx >= 0) return;
+    if (Math.abs(dx) > 10) active.locked = true;
     active.dx = dx;
-    const offset = Math.max(-54, dx * 0.42);
+    const offset = Math.max(-58, dx * 0.48);
     active.el.classList.add('post--swiping');
-    active.el.classList.toggle('post--swipe-armed', Math.abs(dx) > 72);
+    active.el.classList.toggle('post--swipe-armed', Math.abs(dx) > 44);
     active.el.style.transform = `translateX(${offset}px)`;
   }, { passive: true });
 
   document.addEventListener('pointerup', () => {
     if (!active) return;
-    const picked = Math.abs(active.dx) > 72;
+    const picked = Math.abs(active.dx) > 44;
     const { el, id, scope } = active;
     resetActive();
     if (!picked) return;
     setComposeReplyTarget(scope, id);
     el.classList.add('post--reply-picked');
-    setTimeout(() => el.classList.remove('post--reply-picked'), 650);
+    setTimeout(() => el.classList.remove('post--reply-picked'), 950);
   }, { passive: true });
 
   document.addEventListener('pointercancel', resetActive, { passive: true });
@@ -715,6 +916,27 @@ function restorePostButton(btnEl, text = null) {
   delete btnEl.dataset.idleText;
   delete btnEl.dataset.origText;
   delete btnEl.dataset.cooldownTimer;
+}
+
+function startPostButtonCooldown(btnEl, seconds = 5, text = null) {
+  if (!btnEl) return;
+  if (btnEl.dataset.cooldownTimer) clearInterval(Number(btnEl.dataset.cooldownTimer));
+  const restoreText = text || btnEl.dataset.idleText || btnEl.dataset.origText || btnEl.textContent || '\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u044c';
+  let secs = seconds;
+  btnEl.dataset.origText = restoreText;
+  btnEl.classList.remove('btn-post--loading');
+  btnEl.disabled = true;
+  btnEl.textContent = `${secs}\u0441`;
+  const cooldownTimer = setInterval(() => {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(cooldownTimer);
+      restorePostButton(btnEl, restoreText);
+    } else {
+      btnEl.textContent = `${secs}\u0441`;
+    }
+  }, 1000);
+  btnEl.dataset.cooldownTimer = String(cooldownTimer);
 }
 
 function showPostError(message, btnEl) {
@@ -775,6 +997,217 @@ function showPostError(message, btnEl) {
 /* в”Ђв”Ђ Utils в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+function createLinkedTextFragment(text, linkClass = 'post__link') {
+  const fragment = document.createDocumentFragment();
+  const value = String(text || '');
+  const urlRe = /(^|[^\w@./-])((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?:\/[^\s<>"']*)?)/gi;
+  let last = 0, match;
+
+  while ((match = urlRe.exec(value)) !== null) {
+    const prefix = match[1];
+    const raw = match[2];
+    const start = match.index + prefix.length;
+    const clean = raw.replace(/[),.!?;:]+$/g, '');
+    const trailing = raw.slice(clean.length);
+
+    if (start > last) fragment.appendChild(document.createTextNode(value.slice(last, start)));
+
+    const a = document.createElement('a');
+    a.className = linkClass;
+    a.href = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = clean;
+    fragment.appendChild(a);
+
+    if (trailing) fragment.appendChild(document.createTextNode(trailing));
+    last = start + raw.length;
+  }
+
+  if (last < value.length) fragment.appendChild(document.createTextNode(value.slice(last)));
+  return fragment;
+}
+function linkifyTextHtml(text, linkClass = 'post__link') {
+  const holder = document.createElement('div');
+  String(text || '').split('\n').forEach((line, index, lines) => {
+    holder.appendChild(createLinkedTextFragment(line, linkClass));
+    if (index < lines.length - 1) holder.appendChild(document.createElement('br'));
+  });
+  return holder.innerHTML;
+}
+const LINK_PREVIEW_CACHE_KEY = 'bouston_link_preview_cache_v3';
+const _linkPreviewMemory = new Map();
+
+function readLinkPreviewCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LINK_PREVIEW_CACHE_KEY) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLinkPreviewCache(url, data) {
+  if (!url || !data) return;
+  const cache = readLinkPreviewCache();
+  cache[url] = { data, cachedAt: Date.now() };
+  const entries = Object.entries(cache).slice(-40);
+  localStorage.setItem(LINK_PREVIEW_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+}
+
+function getCachedLinkPreview(url) {
+  if (_linkPreviewMemory.has(url)) return _linkPreviewMemory.get(url);
+  const entry = readLinkPreviewCache()[url];
+  if (!entry || Date.now() - entry.cachedAt > 7 * 24 * 60 * 60 * 1000) return null;
+  _linkPreviewMemory.set(url, entry.data);
+  return entry.data;
+}
+
+function extractPreviewUrl(text) {
+  const value = String(text || '');
+  const urlRe = /((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?:\/[^\s<>"']*)?)/gi;
+  let match;
+  while ((match = urlRe.exec(value)) !== null) {
+    const clean = match[0].replace(/[),.!?;:]+$/g, '');
+    const href = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    try {
+      const url = new URL(href);
+      const host = url.hostname.toLowerCase();
+      if (/(^|\.)youtube\.com$/.test(host) || host === 'youtu.be' || /(^|\.)tiktok\.com$/.test(host) || /(^|\.)instagram\.com$/.test(host)) {
+        url.hash = '';
+        return url.toString();
+      }
+    } catch {}
+  }
+  return '';
+}
+
+function getYoutubeId(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'youtu.be') return parsed.pathname.replace(/^\/+/, '').split('/')[0] || '';
+    if (/(^|\.)youtube\.com$/.test(host)) {
+      if (parsed.pathname.startsWith('/shorts/') || parsed.pathname.startsWith('/embed/')) {
+        return parsed.pathname.split('/').filter(Boolean)[1] || parsed.pathname.split('/').filter(Boolean)[0] || '';
+      }
+      return parsed.searchParams.get('v') || '';
+    }
+  } catch {}
+  return '';
+}
+
+function makeLocalLinkPreview(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const youtubeId = getYoutubeId(url);
+    if (youtubeId) {
+      return {
+        provider: 'YouTube',
+        url,
+        title: 'Видео YouTube',
+        description: url.replace(/^https?:\/\//i, ''),
+        image: `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+        embedUrl: `https://www.youtube-nocookie.com/embed/${youtubeId}`,
+      };
+    }
+    if (/(^|\.)tiktok\.com$/.test(host)) {
+      return { provider: 'TikTok', url, title: 'TikTok', description: url.replace(/^https?:\/\//i, ''), image: '', embedUrl: '' };
+    }
+    if (/(^|\.)instagram\.com$/.test(host)) {
+      return { provider: 'Instagram', url, title: 'Instagram', description: url.replace(/^https?:\/\//i, ''), image: '', embedUrl: '' };
+    }
+  } catch {}
+  return null;
+}
+
+async function fetchLinkPreview(url) {
+  const cached = getCachedLinkPreview(url);
+  if (cached) return cached;
+  const local = makeLocalLinkPreview(url);
+  const res = await apiFetch(`${API}/api/link-preview?url=${encodeURIComponent(url)}`);
+  if (!res.ok) throw new Error('preview failed');
+  const data = { ...(local || {}), ...(await res.json()) };
+  _linkPreviewMemory.set(url, data);
+  saveLinkPreviewCache(url, data);
+  return data;
+}
+
+function renderLinkPreviewCard(container, data) {
+  if (!container || !data?.url) return;
+  const title = data.title && data.title !== data.provider ? data.title : data.url;
+  const description = data.description || data.url;
+  const a = document.createElement('a');
+  a.className = 'link-preview';
+  if (data.provider === 'YouTube') a.classList.add('link-preview--youtube');
+  a.href = data.url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+
+  const media = document.createElement('span');
+  media.className = 'link-preview__media';
+  if (data.image) {
+    const img = document.createElement('img');
+    img.src = data.image;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    media.appendChild(img);
+    if (data.embedUrl) {
+      const play = document.createElement('img');
+      play.className = 'link-preview__play';
+      play.src = '/appimg/play.svg';
+      play.alt = '';
+      play.setAttribute('aria-hidden', 'true');
+      media.appendChild(play);
+    }
+  } else {
+    media.classList.add('link-preview__media--empty');
+    media.textContent = (data.provider || 'Link').slice(0, 2);
+  }
+
+  const body = document.createElement('span');
+  body.className = 'link-preview__body';
+  const provider = document.createElement('span');
+  provider.className = 'link-preview__provider';
+  provider.textContent = data.provider || new URL(data.url).hostname;
+  const heading = document.createElement('strong');
+  heading.textContent = title;
+  const desc = document.createElement('span');
+  desc.textContent = description;
+
+  body.append(provider, heading, desc);
+  a.append(media, body);
+  container.replaceChildren(a);
+}
+
+function mountPostLinkPreview(postEl, text) {
+  const wrap = postEl.querySelector('.post__link-preview-wrap');
+  if (!wrap) return;
+  const url = extractPreviewUrl(text);
+  if (!url) { wrap.remove(); return; }
+  wrap.innerHTML = '<div class="link-preview link-preview--loading"><span></span><span></span></div>';
+  const local = makeLocalLinkPreview(url);
+  if (local) renderLinkPreviewCard(wrap, local);
+  requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
+  fetchLinkPreview(url)
+    .then(data => {
+      if (!wrap.isConnected) return;
+      renderLinkPreviewCard(wrap, data);
+      requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
+    })
+    .catch(() => {
+      if (!wrap.isConnected) return;
+      const fallback = makeLocalLinkPreview(url);
+      if (fallback) {
+        renderLinkPreviewCard(wrap, fallback);
+        requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
+      } else {
+        wrap.remove();
+      }
+    });
 }
 function getHandle(profile) {
   const u = profile.username || profile.name || '';
@@ -846,31 +1279,10 @@ function buildPostTextEl(text) {
     return p;
   }
 
-  function appendTextWithLinks(target, value) {
-    const urlRe = /((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
-    let last = 0, match;
-    while ((match = urlRe.exec(value)) !== null) {
-      const raw = match[0];
-      const clean = raw.replace(/[),.!?;:]+$/g, '');
-      const trailing = raw.slice(clean.length);
-      if (match.index > last) target.appendChild(document.createTextNode(value.slice(last, match.index)));
-      const a = document.createElement('a');
-      a.className = 'post__link';
-      a.href = clean.startsWith('www.') ? `https://${clean}` : clean;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = clean;
-      target.appendChild(a);
-      if (trailing) target.appendChild(document.createTextNode(trailing));
-      last = match.index + raw.length;
-    }
-    if (last < value.length) target.appendChild(document.createTextNode(value.slice(last)));
-  }
-
   // Р Р°Р·Р±РёРІР°РµРј С‚РµРєСЃС‚ РїРѕ РїРµСЂРµРЅРѕСЃР°Рј СЃС‚СЂРѕРє Рё РґРѕР±Р°РІР»СЏРµРј <br>
   const lines = text.split('\n');
   lines.forEach((line, index) => {
-    appendTextWithLinks(p, line);
+    p.appendChild(createLinkedTextFragment(line));
     if (index < lines.length - 1) {
       p.appendChild(document.createElement('br'));
     }
@@ -916,6 +1328,29 @@ function buildPostTextEl(text) {
 /* в”Ђв”Ђ Server posts cache в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 const _serverPostsMap = new Map();
 const _editingPostIds = new Set();
+
+function refreshPostLayoutFlags(postEl) {
+  if (!postEl) return;
+  const isVerified = postEl.classList.contains('post--verified');
+  const textEl = postEl.querySelector('.post__text');
+  const footerEl = postEl.querySelector('.post__footer');
+  let textTall = false;
+  if (textEl) {
+    const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
+    textTall = textEl.offsetHeight > lh * 1.8;
+  }
+  const verifiedTall = isVerified && (
+    textTall ||
+    !!postEl.querySelector('.post__pinned') ||
+    !!postEl.querySelector('.post__images') ||
+    !!postEl.querySelector('.link-preview') ||
+    !!postEl.querySelector('.post-reply') ||
+    (footerEl && footerEl.offsetHeight > 44)
+  );
+  postEl.classList.toggle('post--text-tall', textTall);
+  postEl.classList.toggle('post--has-link-preview', !!postEl.querySelector('.link-preview'));
+  postEl.classList.toggle('post--verified-tall', verifiedTall);
+}
 
 function registerServerPost(post) {
   if (!post.reactions)   post.reactions   = {};
@@ -1012,11 +1447,11 @@ function startEditPost(id, postEl, onDone) {
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className   = 'post__edit-btn post__edit-btn--cancel';
-  cancelBtn.textContent = 'РћС‚РјРµРЅР°';
+  cancelBtn.textContent = '\u041e\u0442\u043c\u0435\u043d\u0430';
 
   const saveBtn = document.createElement('button');
   saveBtn.className   = 'post__edit-btn post__edit-btn--save';
-  saveBtn.textContent = 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+  saveBtn.textContent = '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c';
 
   actions.append(cancelBtn, saveBtn);
   if (textWrap) textWrap.replaceWith(textarea);
@@ -1042,12 +1477,13 @@ function startEditPost(id, postEl, onDone) {
     }
     postEl.classList.remove('post--editing');
     _editingPostIds.delete(id);
+    requestAnimationFrame(() => refreshPostLayoutFlags(postEl));
   };
   const failSave = message => {
     saveBtn.disabled = false;
-    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+    saveBtn.textContent = saveBtn.dataset.idleText || '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c';
     delete saveBtn.dataset.idleText;
-    showPostError(message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚', saveBtn);
+    showPostError(message || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u043e\u0441\u0442', saveBtn);
   };
 
   cancelBtn.addEventListener('click', e => {
@@ -1058,9 +1494,9 @@ function startEditPost(id, postEl, onDone) {
   saveBtn.addEventListener('click', async e => {
     e.preventDefault();
     const newText = textarea.value.trim();
-    if (!newText) { failSave('РўРµРєСЃС‚ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј'); return; }
+    if (!newText) { failSave('\u0422\u0435\u043a\u0441\u0442 \u043d\u0435 \u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u043f\u0443\u0441\u0442\u044b\u043c'); return; }
     saveBtn.dataset.idleText = saveBtn.textContent;
-    saveBtn.textContent = 'РЎРѕС…СЂР°РЅРµРЅРёРµ...';
+    saveBtn.textContent = '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435...';
     saveBtn.disabled = true;
 
     if (isServer) {
@@ -1081,7 +1517,7 @@ function startEditPost(id, postEl, onDone) {
           mergeFeedPostsCache([nextPost]);
           if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
         } else {
-          let message = 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚';
+          let message = '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u043e\u0441\u0442';
           try {
             const data = await res.json();
             if (data?.detail) message = data.detail;
@@ -1092,10 +1528,10 @@ function startEditPost(id, postEl, onDone) {
       } catch (err) {
         clearTimeout(timeout);
         if (err.name === 'AbortError') {
-          failSave('РЎРµСЂРІРµСЂ РЅРµ РѕС‚РІРµС‚РёР», РїРѕРїСЂРѕР±СѓР№ РµС‰С‘ СЂР°Р·');
+          failSave('\u0421\u0435\u0440\u0432\u0435\u0440 \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0435\u0449\u0435 \u0440\u0430\u0437');
           return;
         }
-        failSave('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј');
+        failSave('\u041d\u0435\u0442 \u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u044f \u0441 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u043c');
         return;
       }
     } else {
@@ -1103,7 +1539,7 @@ function startEditPost(id, postEl, onDone) {
       const p = posts.find(p => p.id === id);
       if (p) { p.text = newText; p.editedAt = Date.now(); savePosts(posts); }
     }
-    saveBtn.textContent = saveBtn.dataset.idleText || 'РЎРѕС…СЂР°РЅРёС‚СЊ';
+    saveBtn.textContent = saveBtn.dataset.idleText || '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c';
     delete saveBtn.dataset.idleText;
     closeEditor(isServer ? (_serverPostsMap.get(id)?.text || newText) : newText);
     onDone();
@@ -1163,18 +1599,39 @@ function handleDeletedPost(id) {
 
 function pinPost(id, onDone) {
   if (_serverPostsMap.has(id)) {
+    const current = _serverPostsMap.get(id);
+    const previous = { ...current };
+    const nextPost = {
+      ...current,
+      pinned: !current.pinned,
+      pinnedAt: current.pinned ? null : Date.now(),
+    };
+    _serverPostsMap.set(id, nextPost);
+    mergeFeedPostsCache([nextPost]);
+    if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+    onDone();
+
     apiFetch(`${API}/posts/${id}/pin`, { method: 'PUT' })
       .then(r => r.ok ? r.json() : null)
       .then(updated => {
         if (updated) {
-          const nextPost = { ..._serverPostsMap.get(id), ...updated };
-          _serverPostsMap.set(id, nextPost);
-          mergeFeedPostsCache([nextPost]);
-          if (nextPost.author?.tgUsername) mergeProfilePostsCache(nextPost.author.tgUsername, [nextPost]);
+          const serverPost = { ..._serverPostsMap.get(id), ...updated };
+          _serverPostsMap.set(id, serverPost);
+          mergeFeedPostsCache([serverPost]);
+          if (serverPost.author?.tgUsername) mergeProfilePostsCache(serverPost.author.tgUsername, [serverPost]);
+        } else {
+          _serverPostsMap.set(id, previous);
+          mergeFeedPostsCache([previous]);
+          if (previous.author?.tgUsername) mergeProfilePostsCache(previous.author.tgUsername, [previous]);
+          onDone();
         }
-        onDone();
       })
-      .catch(() => onDone());
+      .catch(() => {
+        _serverPostsMap.set(id, previous);
+        mergeFeedPostsCache([previous]);
+        if (previous.author?.tgUsername) mergeProfilePostsCache(previous.author.tgUsername, [previous]);
+        onDone();
+      });
     return;
   }
   const posts = getPosts();
@@ -1227,38 +1684,21 @@ async function getEmojiFileMap() {
   return _emojiFileMap;
 }
 
-const REACTION_ANIMATION_BATCH_SIZE = 5;
-const _batchedTgsAnimationStates = new WeakMap();
+let _reactionToPlayOnce = null;
 
 function registerBatchedTgsPlayer(wrapper, player, index = null) {
-  let state = _batchedTgsAnimationStates.get(wrapper);
-  if (!state) {
-    state = { players: [], timer: null, running: false };
-    _batchedTgsAnimationStates.set(wrapper, state);
-  }
-
   player.showFirstFrame?.();
-  if (index === null) state.players.push(player);
-  else state.players[index] = player;
-  clearTimeout(state.timer);
-  state.timer = setTimeout(() => {
-    const run = () => runBatchedTgsAnimations(wrapper);
-    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 900 });
-    else setTimeout(run, 120);
-  }, 80);
 }
 
-async function runBatchedTgsAnimations(wrapper) {
-  const state = _batchedTgsAnimationStates.get(wrapper);
-  if (!state || state.running || !wrapper.isConnected) return;
+function shouldPlayReactionOnce(id, emoji) {
+  if (!_reactionToPlayOnce) return false;
+  return Number(_reactionToPlayOnce.id) === Number(id) && _reactionToPlayOnce.emoji === emoji;
+}
 
-  state.running = true;
-  const players = state.players.filter(Boolean);
-  for (let i = 0; i < players.length && wrapper.isConnected; i += REACTION_ANIMATION_BATCH_SIZE) {
-    const batch = players.slice(i, i + REACTION_ANIMATION_BATCH_SIZE);
-    await Promise.all(batch.map(player => player.playOnce?.() || Promise.resolve()));
-  }
-  state.running = false;
+function consumeReactionToPlayOnce(id, emoji) {
+  if (!shouldPlayReactionOnce(id, emoji)) return false;
+  _reactionToPlayOnce = null;
+  return true;
 }
 
 function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
@@ -1277,10 +1717,12 @@ function buildReactionBtn(emoji, count, active, id, wrapper = null, index = 0) {
       player.dataset.tgs = '1';
       iconWrap.appendChild(player);
       if (wrapper) registerBatchedTgsPlayer(wrapper, player, index);
+      if (consumeReactionToPlayOnce(id, emoji)) player.playOnce?.();
     } else {
+      consumeReactionToPlayOnce(id, emoji);
       iconWrap.textContent = emoji;
     }
-  });
+  }).catch(() => { consumeReactionToPlayOnce(id, emoji); });
 
   const counter = document.createElement('span');
   counter.textContent = count;
@@ -1350,6 +1792,7 @@ function reactionLimit() {
 }
 
 async function toggleReaction(id, emoji) {
+  _reactionToPlayOnce = { id, emoji };
   const isServer = _serverPostsMap.has(id);
 
   if (isServer) {
@@ -1509,6 +1952,60 @@ function buildReplyPreviewHtml(replyTo) {
   `;
 }
 
+function getPostScrollContainer(postEl) {
+  return postEl.closest('.feed, .profile-wrap, .thread-panel__body, #user-profile-wrap') || document.scrollingElement;
+}
+
+function flashTargetPost(postEl) {
+  postEl.classList.remove('post--reply-target');
+  void postEl.offsetWidth;
+  postEl.classList.add('post--reply-target');
+  setTimeout(() => postEl.classList.remove('post--reply-target'), 1300);
+}
+
+function scrollToPostEl(postEl) {
+  postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  flashTargetPost(postEl);
+}
+
+async function fetchPostById(postId) {
+  const res = await apiFetch(`${API}/posts/${postId}`);
+  if (!res.ok) throw new Error('post not found');
+  return res.json();
+}
+
+async function jumpToReplyPost(postId) {
+  const id = Number(postId);
+  if (!id) return;
+
+  let target = document.querySelector(`.post[data-post-id="${id}"]`);
+  if (target) { scrollToPostEl(target); return; }
+
+  let post = getPostById(id);
+  if (!post) {
+    try { post = await fetchPostById(id); }
+    catch { return; }
+  }
+  registerServerPost(post);
+
+  const feedContainer = document.getElementById('posts-container');
+  if (feedContainer) {
+    if (typeof showView === 'function') showView('feed');
+    const merged = mergeFeedPostsCache([post]);
+    if (typeof syncFeedPostsIntoDom === 'function') syncFeedPostsIntoDom(feedContainer, merged);
+    else if (!feedContainer.querySelector(`.post[data-post-id="${id}"]`)) {
+      const postEl = buildPostEl(post, null, null, false, '', 0, false);
+      postEl.classList.remove('post--enter');
+      feedContainer.prepend(postEl);
+    }
+  }
+
+  requestAnimationFrame(() => {
+    target = document.querySelector(`.post[data-post-id="${id}"]`);
+    if (target) scrollToPostEl(target);
+  });
+}
+
 function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin) {
   if (post.author) {
     const a   = post.author;
@@ -1537,8 +2034,13 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   el.className = 'post post--enter' + extra;
   if (post.replyTo) el.classList.add('post--has-reply');
   el.dataset.postId = post.id;
-  if (post.author) el.dataset.author = post.author.tgUsername;
-  else if (window._tgUsername) el.dataset.author = window._tgUsername;
+  if (post.author) {
+    el.dataset.author = post.author.tgUsername;
+    el.dataset.profileAuthor = post.author.profileUsername || post.author.tgUsername;
+  } else if (window._tgUsername) {
+    el.dataset.author = window._tgUsername;
+    el.dataset.profileAuthor = getProfile().username || window._tgUsername;
+  }
 
   const delay = (i % 5) * 50;
   el.style.animationDelay = delay + 'ms';
@@ -1575,6 +2077,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
     </div>
     ${post.replyTo ? buildReplyPreviewHtml(post.replyTo) : ''}
     ${post.text ? `<div class="post__text-wrap"></div>` : ''}
+    ${post.text ? `<div class="post__link-preview-wrap"></div>` : ''}
     ${post.images && post.images.length ? `
     <div class="post__images post__images--${Math.min(post.images.length, 4)}">
       ${post.images.slice(0, 4).map(m => {
@@ -1585,7 +2088,7 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
         const fullSrc = item.fullSrc || item.src;
         if (item.type === 'video') return `<div class="post__video-wrap" data-src="${previewSrc}" data-full-src="${fullSrc}"></div>`;
         const isGif = item.mime === 'image/gif' || item.src.startsWith('data:image/gif');
-        return `<img class="post__image${isGif ? ' post__image--gif' : ''}" src="${previewSrc}" data-full-src="${fullSrc}" loading="lazy" decoding="async" alt="" />`;
+        return `<div class="post__media-item${isGif ? ' post__media-item--gif' : ''}"><img class="post__image${isGif ? ' post__image--gif' : ''}" src="${previewSrc}" data-full-src="${fullSrc}" loading="lazy" decoding="async" alt="" /></div>`;
       }).join('')}
     </div>` : ''}
     <div class="post__footer">
@@ -1606,17 +2109,16 @@ function buildPostEl(post, profile, avatarSrc, isVerified, badgeHtml, i, showPin
   el.querySelector('.post__reactions').replaceWith(buildReactionsEl(post));
   const textWrap = el.querySelector('.post__text-wrap');
   if (textWrap && post.text) textWrap.replaceWith(buildPostTextEl(post.text));
+  mountPostLinkPreview(el, post.text || '');
+  el.querySelector('.post-reply')?.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    jumpToReplyPost(e.currentTarget.dataset.replyId);
+  });
   mountVideoPlayers(el);
 
   const markTallPost = () => {
-    const textEl = el.querySelector('.post__text');
-    const footerEl = el.querySelector('.post__footer');
-    if (textEl) {
-      const lh = parseFloat(getComputedStyle(textEl).lineHeight) || 22;
-      if (textEl.offsetHeight > lh * 1.8) el.classList.add('post--text-tall');
-      if (isVerified && textEl.offsetHeight > lh * 1.8) el.classList.add('post--verified-tall');
-    }
-    if (isVerified && footerEl && footerEl.offsetHeight > 44) el.classList.add('post--verified-tall');
+    refreshPostLayoutFlags(el);
   };
   if ('requestIdleCallback' in window) requestIdleCallback(markTallPost, { timeout: 900 });
   else requestAnimationFrame(markTallPost);

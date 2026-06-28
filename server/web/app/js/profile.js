@@ -29,8 +29,9 @@ function renderProfile() {
     bannerImg.classList.add('loaded');
     bannerPH.style.display = 'none';
   };
-  if (p.banner) {
-    bannerImg.src = p.banner;
+  const bannerSrc = getProfileBannerSrc(p);
+  if (bannerSrc) {
+    bannerImg.src = bannerSrc;
     bannerImg.classList.add('loaded');
     bannerPH.style.display = 'none';
   } else {
@@ -49,7 +50,7 @@ function renderProfile() {
   document.getElementById('input-username-profile').value = p.username ? '@' + p.username : '';
   document.getElementById('input-bio').value              = p.bio;
   syncModalPreview('modal-avatar-preview', 'btn-pick-avatar', p.avatar || '/appimg/default_avatar.png', true);
-  if (p.banner) syncModalPreview('modal-banner-preview', 'btn-pick-banner', p.banner, false);
+  if (bannerSrc) syncModalPreview('modal-banner-preview', 'btn-pick-banner', bannerSrc, false);
 
   const composeAvatar = document.getElementById('profile-compose-avatar');
   if (composeAvatar) composeAvatar.src = getProfileAvatarPreview(p) || '/appimg/default_avatar.png';
@@ -84,7 +85,19 @@ function syncModalPreview(imgId, btnId, src, alwaysShow) {
 let _profileObserver = null;
 let _profilePostsRendered = false;
 let _profilePostsRefreshPromise = null;
+let _profileRemainingLoadPromise = null;
 let _profileRenderToken = 0;
+let _profileLastRefreshAt = 0;
+const PROFILE_PAGE = 10;
+const PROFILE_REFRESH_COOLDOWN = 30000;
+
+function getFastProfilePostsCache(username) {
+  const profilePosts = getProfilePostsCache(username);
+  if (profilePosts.length) return profilePosts;
+  return getFeedPostsCache()
+    .filter(post => post.author?.tgUsername === username || post.isOwn)
+    .slice(0, PROFILE_PAGE * 3);
+}
 
 function attachProfileMenu(container) {
   container.querySelectorAll('.post__more-wrap:not([data-bound])').forEach(wrap => {
@@ -113,7 +126,7 @@ async function renderProfilePosts() {
   const u = window._tgUsername;
 
   if (_profilePostsRendered && container.querySelector('.post[data-post-id]')) {
-    refreshProfilePostsFromServer(container, u);
+    refreshProfilePostsFromServer(container, u, { respectCooldown: true, hadCache: true });
     return;
   }
 
@@ -122,27 +135,30 @@ async function renderProfilePosts() {
     return;
   }
 
-  const cached = getProfilePostsCache(u);
+  const cached = getFastProfilePostsCache(u);
   if (cached.length) {
+    mergeProfilePostsCache(u, cached);
     _renderProfilePostsList(container, cached);
     _profilePostsRendered = true;
   } else {
     renderPostSkeletons(container, 3);
   }
 
-  await refreshProfilePostsFromServer(container, u, { allowInitialRender: true, hadCache: !!cached.length });
+  refreshProfilePostsFromServer(container, u, { allowInitialRender: true, hadCache: !!cached.length });
 }
 
 async function refreshProfilePostsFromServer(container, username, options = {}) {
   if (!username) return;
+  if (options.respectCooldown && Date.now() - _profileLastRefreshAt < PROFILE_REFRESH_COOLDOWN) return;
   if (_profilePostsRefreshPromise) return _profilePostsRefreshPromise;
 
   _profilePostsRefreshPromise = (async () => {
     let posts;
     try {
-      const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(username)}&limit=100`);
+      const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(username)}&page=1&limit=${PROFILE_PAGE}`);
       if (!res.ok) throw new Error();
       posts = await res.json();
+      _profileLastRefreshAt = Date.now();
     } catch {
       if (!options.hadCache && !container.querySelector('.post[data-post-id]')) {
         container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
@@ -167,6 +183,9 @@ async function refreshProfilePostsFromServer(container, username, options = {}) 
       renderProfileIfMissingPosts(container, merged);
     }
     _profilePostsRendered = true;
+    if (posts.length >= PROFILE_PAGE) {
+      loadRemainingProfilePosts(container, username, 2);
+    }
   })().finally(() => { _profilePostsRefreshPromise = null; });
 
   return _profilePostsRefreshPromise;
@@ -175,8 +194,8 @@ function _renderProfilePostsList(container, posts) {
   const token = ++_profileRenderToken;
   container.innerHTML = '';
   container.dataset.lastDateKey = '';
-  const first = posts.slice(0, 6);
-  const rest = posts.slice(6);
+  const first = posts.slice(0, PROFILE_PAGE);
+  const rest = posts.slice(PROFILE_PAGE);
   let lastDateKey = container.dataset.lastDateKey || null;
   first.forEach((post, i) => {
     registerServerPost(post);
@@ -191,6 +210,30 @@ function _renderProfilePostsList(container, posts) {
   container.dataset.lastDateKey = lastDateKey || '';
   attachProfileMenu(container);
   appendProfilePostsInChunks(container, rest, token);
+}
+
+async function loadRemainingProfilePosts(container, username, startPage = 2) {
+  if (_profileRemainingLoadPromise) return _profileRemainingLoadPromise;
+  _profileRemainingLoadPromise = (async () => {
+    let page = startPage;
+    while (container.isConnected) {
+      let posts;
+      try {
+        const res = await apiFetch(`${API}/posts?author=${encodeURIComponent(username)}&page=${page}&limit=${PROFILE_PAGE}`);
+        if (!res.ok) break;
+        posts = await res.json();
+      } catch {
+        break;
+      }
+      if (!posts.length) break;
+      const merged = mergeProfilePostsCache(username, posts);
+      renderProfileIfMissingPosts(container, merged);
+      if (posts.length < PROFILE_PAGE) break;
+      page += 1;
+      await new Promise(resolve => runWhenIdle(resolve, 1200));
+    }
+  })().finally(() => { _profileRemainingLoadPromise = null; });
+  return _profileRemainingLoadPromise;
 }
 
 function appendProfilePostsInChunks(container, posts, token) {
@@ -224,8 +267,13 @@ function renderProfileIfMissingPosts(container, posts) {
   const missing = posts.filter(post => !container.querySelector(`.post[data-post-id="${post.id}"]`));
   const domOrder = Array.from(container.querySelectorAll('.post[data-post-id]')).map(el => Number(el.dataset.postId));
   const nextOrder = posts.map(post => Number(post.id));
-  const orderChanged = domOrder.length !== nextOrder.length || nextOrder.some((id, index) => domOrder[index] !== id);
-  if (missing.length || orderChanged) _renderProfilePostsList(container, posts);
+  const currentIsPrefix = domOrder.every((id, index) => nextOrder[index] === id);
+  const orderChanged = !currentIsPrefix || nextOrder.slice(0, domOrder.length).some((id, index) => domOrder[index] !== id);
+  if (missing.length && currentIsPrefix) {
+    appendProfilePostsInChunks(container, missing, _profileRenderToken);
+  } else if (missing.length || orderChanged) {
+    _renderProfilePostsList(container, posts);
+  }
 }
 
 function prependPostToProfile(post) {
@@ -279,8 +327,9 @@ function openModal() {
   document.getElementById('btn-pick-avatar').classList.add('has-image');
 
   const bannerImg = document.getElementById('modal-banner-preview');
-  if (p.banner) {
-    bannerImg.src = p.banner;
+  const bannerSrc = getProfileBannerSrc(p);
+  if (bannerSrc) {
+    bannerImg.src = bannerSrc;
     bannerImg.style.display = 'block';
     document.getElementById('btn-pick-banner').classList.add('has-image');
   }
@@ -347,7 +396,7 @@ document.getElementById('confirm-logout-yes').addEventListener('click', () => {
 });
 
 document.getElementById('input-username-profile').addEventListener('input', function () {
-  let val = this.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
+  let val = this.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
   if (!val) { this.value = ''; return; }
   this.value = '@' + val;
   const pos = this.value.length;
@@ -383,6 +432,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   if (newUser) {
     if (newUser.length < 3) { showFieldError('input-username-profile', 'Минимум 3 символа'); return; }
     if (newUser.length > 20) { showFieldError('input-username-profile', 'Максимум 20 символов'); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(newUser)) { showFieldError('input-username-profile', 'Только буквы, цифры и _'); return; }
   }
   clearFieldError('input-username-profile');
 
@@ -433,7 +483,10 @@ document.getElementById('btn-save').addEventListener('click', async () => {
     p.avatar = newAvatar;
     p.avatarPreview = newAvatar;
   }
-  if (newBanner !== undefined) p.banner = newBanner;
+  if (newBanner !== undefined) {
+    p.banner = newBanner;
+    p.bannerPreview = newBanner;
+  }
 
   invalidateProfileCache();
   saveProfile(p);
@@ -446,7 +499,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
       verified: p.verified,
       avatar_url: p.avatar,
       avatar_preview_url: getProfileAvatarPreview(p) || p.avatar,
-      banner_url: p.banner,
+      banner_url: getProfileBannerSrc(p),
     });
   }
   closeModal();
@@ -476,7 +529,13 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
   if (!text && !images.length) return;
 
   const btn = document.getElementById('profile-btn-post');
-  setButtonBusy(btn, true, 'Публикация...');
+  const optimisticPost = buildOptimisticPost(text, images, replyToPostId);
+  clearComposeInput('profile-compose-input');
+  clearComposeImages('profile');
+  clearComposeReplyTarget('profile');
+  prependPostToProfile(optimisticPost);
+  if (typeof prependPostToFeed === 'function') prependPostToFeed(optimisticPost);
+  startPostButtonCooldown(btn, 5);
 
   try {
     const res = await apiFetch(`${API}/posts`, {
@@ -488,13 +547,12 @@ document.getElementById('profile-btn-post').addEventListener('click', async () =
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
 
     const post = await res.json();
-    clearComposeInput('profile-compose-input');
-    clearComposeImages('profile');
-    clearComposeReplyTarget('profile');
+    handleDeletedPost(optimisticPost.id);
     prependPostToProfile(post);
     if (typeof prependPostToFeed === 'function') prependPostToFeed(post);
   } catch (err) {
     if (err.message === 'unauthorized') return;
+    handleDeletedPost(optimisticPost.id);
     showPostError(err.message, btn);
   } finally {
     if (!btn.dataset.cooldownTimer) setButtonBusy(btn, false);

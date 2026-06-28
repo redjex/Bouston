@@ -47,4 +47,4 @@ MAX_IMAGES       = 10
 MAX_LIMIT        = 100
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
-USERNAME_RE = re.compile(r'^[a-zA-Z0-9_.]{3,20}$')
+USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,20}$')

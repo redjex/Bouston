@@ -24,6 +24,7 @@ AVATAR_LOW_SCAN_INTERVAL = 10
 POSTS_QUERY = """
     SELECT p.*,
            u.display_name, u.first_name, u.profile_username,
+           u.user_id      AS author_user_id,
            u.avatar_path  AS author_avatar_path,
            u.is_premium   AS author_premium,
            u.verified     AS author_verified,
@@ -33,6 +34,7 @@ POSTS_QUERY = """
            rp.images      AS reply_images,
            rp.created_at  AS reply_created_at,
            ru.username    AS reply_tg_username,
+           ru.user_id     AS reply_user_id,
            ru.display_name AS reply_display_name,
            ru.first_name  AS reply_first_name,
            ru.profile_username AS reply_profile_username
@@ -45,6 +47,7 @@ POSTS_QUERY = """
 COMMENTS_QUERY = """
     SELECT c.*,
            u.display_name, u.first_name, u.profile_username,
+           u.user_id      AS author_user_id,
            u.avatar_path  AS author_avatar_path,
            u.verified     AS author_verified,
            u.updated_at   AS updated_at
@@ -63,22 +66,23 @@ def save_avatar_image(raw: bytes, output_path: Path, size: int = 640, quality: i
         img.save(output_path, "JPEG", quality=quality, optimize=True, progressive=True)
 
 
-def ensure_avatar_low(username: str, avatar_path: str | Path | None) -> str | None:
+def ensure_avatar_low(avatar_key, avatar_path):
+    avatar_key = str(avatar_key)
     avatar_path = Path(avatar_path) if avatar_path else None
     if Image is None or ImageOps is None or not avatar_path or not avatar_path.exists():
         return None
-    low_path = AVATAR_LOW_DIR / f"{username}.jpg"
+    low_path = AVATAR_LOW_DIR / f"{avatar_key}.jpg"
     try:
         src_mtime = avatar_path.stat().st_mtime
         if low_path.exists() and low_path.stat().st_mtime >= src_mtime:
             with Image.open(low_path) as low_img:
                 if low_img.size == AVATAR_LOW_SIZE:
-                    return f"avatar_low/{username}.jpg"
+                    return f"avatar_low/{avatar_key}.jpg"
         with Image.open(avatar_path) as img:
             img = ImageOps.exif_transpose(img).convert("RGB")
             img = ImageOps.fit(img, AVATAR_LOW_SIZE, Image.Resampling.LANCZOS, centering=(0.5, 0.5))
             img.save(low_path, "JPEG", quality=70, optimize=True, progressive=True)
-            return f"avatar_low/{username}.jpg"
+            return f"avatar_low/{avatar_key}.jpg"
     except Exception:
         return None
 
@@ -93,12 +97,22 @@ def build_avatar_low_from_img_dir() -> None:
         ensure_avatar_low(avatar_path.stem, avatar_path)
 
 
-def avatar_urls(username: str, avatar_path: str | None, updated_at: float | int | None) -> tuple[str | None, str | None]:
+def avatar_urls(avatar_key, avatar_path, updated_at):
     if not avatar_path or not Path(avatar_path).exists():
         return None, None
+    avatar_key = str(avatar_key)
+    source_path = Path(avatar_path)
+    target_path = IMG_DIR / f"{avatar_key}.jpg"
+    if source_path != target_path:
+        try:
+            if not target_path.exists() or target_path.stat().st_mtime < source_path.stat().st_mtime:
+                target_path.write_bytes(source_path.read_bytes())
+            avatar_path = str(target_path)
+        except Exception:
+            pass
     t = int(updated_at or 0)
-    full_url = f"{SERVER_BASE}/img/{username}.jpg?t={t}"
-    low = ensure_avatar_low(username, avatar_path)
+    full_url = f"{SERVER_BASE}/img/{avatar_key}.jpg?t={t}"
+    low = ensure_avatar_low(avatar_key, avatar_path)
     preview_url = f"{SERVER_BASE}/img/{low}?t={t}" if low else full_url
     return full_url, preview_url
 
@@ -156,6 +170,7 @@ async def init_db() -> None:
         if 'display_name'     not in cols: await conn.execute("ALTER TABLE users ADD COLUMN display_name     TEXT")
         if 'profile_username' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN profile_username TEXT")
         if 'verified'         not in cols: await conn.execute("ALTER TABLE users ADD COLUMN verified         INTEGER DEFAULT 0")
+        if 'banned'           not in cols: await conn.execute("ALTER TABLE users ADD COLUMN banned           INTEGER DEFAULT 0")
         if 'banner_path'      not in cols: await conn.execute("ALTER TABLE users ADD COLUMN banner_path      TEXT")
         if 'wallpaper_path'   not in cols: await conn.execute("ALTER TABLE users ADD COLUMN wallpaper_path   TEXT")
         if 'gradients_enabled' not in cols: await conn.execute("ALTER TABLE users ADD COLUMN gradients_enabled INTEGER DEFAULT 1")
@@ -214,10 +229,26 @@ async def init_db() -> None:
                 user_agent  TEXT,
                 ip          TEXT,
                 device      TEXT,
+                gpu_renderer TEXT,
+                timezone    TEXT,
                 created_at  REAL NOT NULL,
                 last_seen_at REAL NOT NULL,
                 revoked_at  REAL,
                 FOREIGN KEY (tg_username) REFERENCES users(username) ON DELETE CASCADE
+            )
+        """)
+        cursor = await conn.execute("PRAGMA table_info(auth_sessions)")
+        scols = [r[1] for r in await cursor.fetchall()]
+        if 'gpu_renderer' not in scols: await conn.execute("ALTER TABLE auth_sessions ADD COLUMN gpu_renderer TEXT")
+        if 'timezone' not in scols: await conn.execute("ALTER TABLE auth_sessions ADD COLUMN timezone TEXT")
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS hardban_fingerprints (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                tg_username  TEXT NOT NULL,
+                ip           TEXT,
+                gpu_renderer TEXT,
+                timezone     TEXT,
+                created_at   REAL NOT NULL
             )
         """)
         await conn.commit()
@@ -317,19 +348,34 @@ def describe_user_agent(user_agent: str) -> str:
     return f"{browser} на {os}"
 
 
-async def db_create_auth_session(username: str, user_agent: str, ip: str) -> str:
+async def db_create_auth_session(
+    username: str,
+    user_agent: str,
+    ip: str,
+    gpu_renderer: str | None = None,
+    timezone: str | None = None,
+) -> str:
     session_id = uuid.uuid4().hex
     now = time.time()
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             """
-            INSERT INTO auth_sessions (id, tg_username, user_agent, ip, device, created_at, last_seen_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO auth_sessions (id, tg_username, user_agent, ip, device, gpu_renderer, timezone, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, username, user_agent, ip, describe_user_agent(user_agent), now, now),
+            (session_id, username, user_agent, ip, describe_user_agent(user_agent), gpu_renderer, timezone, now, now),
         )
         await conn.commit()
     return session_id
+
+
+async def db_revoke_user_sessions(username: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE tg_username = ?",
+            (time.time(), username),
+        )
+        await conn.commit()
 
 
 async def db_touch_auth_session(session_id: str, username: str) -> bool:
@@ -379,6 +425,92 @@ async def db_revoke_auth_session(username: str, session_id: str) -> bool:
         return cursor.rowcount > 0
 
 
+def _clean_fingerprint_value(value: str | None, limit: int = 300) -> str | None:
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value[:limit] if value else None
+
+
+async def db_is_hardban_blocked(ip: str, gpu_renderer: str | None, timezone: str | None) -> bool:
+    gpu_renderer = _clean_fingerprint_value(gpu_renderer)
+    timezone = _clean_fingerprint_value(timezone, 80)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """
+            SELECT 1
+            FROM hardban_fingerprints
+            WHERE (ip IS NOT NULL AND ip = ?)
+               OR (
+                    gpu_renderer IS NOT NULL AND gpu_renderer = ?
+                    AND timezone IS NOT NULL AND timezone = ?
+                    AND (ip IS NULL OR ip != ?)
+               )
+            LIMIT 1
+            """,
+            (ip, gpu_renderer, timezone, ip),
+        )
+        return await cursor.fetchone() is not None
+
+
+async def db_store_hardban_fingerprints(username: str) -> None:
+    now = time.time()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """
+            SELECT DISTINCT ip, gpu_renderer, timezone
+            FROM auth_sessions
+            WHERE tg_username = ?
+              AND (ip IS NOT NULL OR gpu_renderer IS NOT NULL OR timezone IS NOT NULL)
+            """,
+            (username,),
+        )
+        rows = await cursor.fetchall()
+        for row in rows:
+            await conn.execute(
+                """
+                INSERT INTO hardban_fingerprints (tg_username, ip, gpu_renderer, timezone, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    username,
+                    _clean_fingerprint_value(row["ip"], 80),
+                    _clean_fingerprint_value(row["gpu_renderer"]),
+                    _clean_fingerprint_value(row["timezone"], 80),
+                    now,
+                ),
+            )
+        await conn.commit()
+
+
+async def db_delete_user_posts(username: str) -> int:
+    deleted = 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute("SELECT id, images FROM posts WHERE tg_username = ?", (username,))
+        rows = await cursor.fetchall()
+        for row in rows:
+            for item in json.loads(row["images"] or "[]"):
+                filename = item if isinstance(item, str) else item.get("file")
+                preview = None if isinstance(item, str) else item.get("preview")
+                try:
+                    if filename:
+                        (POSTS_IMG_DIR / filename).unlink(missing_ok=True)
+                    if preview:
+                        (POSTS_IMG_DIR / preview).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            await conn.execute("DELETE FROM post_reactions WHERE post_id = ?", (row["id"],))
+            await conn.execute("DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)", (row["id"],))
+            await conn.execute("DELETE FROM comments WHERE post_id = ?", (row["id"],))
+            deleted += 1
+        await conn.execute("DELETE FROM posts WHERE tg_username = ?", (username,))
+        await conn.commit()
+    return deleted
+
+
 def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_reactions: list, comment_count: int) -> dict:
     images_filenames = json.loads(row["images"] or "[]")
     image_urls = []
@@ -409,7 +541,7 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
             "mime":       item.get("mime") or "",
         })
 
-    avatar_url, avatar_preview_url = avatar_urls(row["tg_username"], row["author_avatar_path"], row["updated_at"])
+    avatar_url, avatar_preview_url = avatar_urls(row["profile_username"] or row["tg_username"], row["author_avatar_path"], row["updated_at"])
 
     reply_to = None
     if row["reply_id"]:
@@ -423,6 +555,7 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
                 "tgUsername":      row["reply_tg_username"],
                 "displayName":     row["reply_display_name"] or row["reply_first_name"] or row["reply_tg_username"],
                 "profileUsername": row["reply_profile_username"] or row["reply_tg_username"],
+                "userId":          row["reply_user_id"],
             },
         }
 
@@ -443,6 +576,7 @@ def build_post_response(row: aiosqlite.Row, viewer: str, reactions: dict, my_rea
             "tgUsername":      row["tg_username"],
             "displayName":     row["display_name"] or row["first_name"] or row["tg_username"],
             "profileUsername": row["profile_username"] or row["tg_username"],
+            "userId":          row["author_user_id"],
             "avatarUrl":       avatar_url,
             "avatarPreviewUrl": avatar_preview_url,
             "isPremium":       bool(row["author_premium"]),
@@ -469,7 +603,7 @@ async def fetch_post_extras(conn: aiosqlite.Connection, post_id: int, viewer: st
 
 
 def build_comment_response(row: aiosqlite.Row, viewer: str, likes_count: int, my_like: bool) -> dict:
-    avatar_url, avatar_preview_url = avatar_urls(row["tg_username"], row["author_avatar_path"], row["updated_at"])
+    avatar_url, avatar_preview_url = avatar_urls(row["profile_username"] or row["tg_username"], row["author_avatar_path"], row["updated_at"])
 
     return {
         "id":         row["id"],

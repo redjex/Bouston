@@ -8,14 +8,17 @@ function renderFeedComposeAvatar() {
   if (el) el.src = getProfileAvatarPreview(p) || '/appimg/default_avatar.png';
 }
 
-const FEED_PAGE = 20;
+const FEED_PAGE = 10;
 let _feedObserver = null;
 let _feedPage     = 1;
 let _feedLoading  = false;
 let _feedDone     = false;
 let _feedRendered = false;
 let _feedRefreshPromise = null;
+let _feedGapFillPromise = null;
 let _feedRenderToken = 0;
+let _feedLastRefreshAt = 0;
+const FEED_REFRESH_COOLDOWN = 30000;
 
 function renderPostSkeletons(container, count = 4) {
   container.innerHTML = '';
@@ -50,6 +53,10 @@ function runWhenIdle(fn, timeout = 600) {
   setTimeout(fn, 32);
 }
 
+function waitForIdle(timeout = 900) {
+  return new Promise(resolve => runWhenIdle(resolve, timeout));
+}
+
 function attachFeedMenu(container) {
   container.querySelectorAll('.post__more-wrap:not([data-bound])').forEach(wrap => {
     wrap.dataset.bound = '1';
@@ -70,7 +77,11 @@ function attachFeedMenu(container) {
 
 async function fetchFeedPage(page) {
   const res = await apiFetch(`${API}/posts?page=${page}&limit=${FEED_PAGE}`);
-  if (!res.ok) throw new Error('fetch failed');
+  if (!res.ok) {
+    const err = new Error('fetch failed');
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }
 
@@ -79,7 +90,7 @@ async function renderFeedPosts() {
   const container = document.getElementById('posts-container');
 
   if (_feedRendered && container.querySelector('.post[data-post-id]')) {
-    refreshFeedFromServer(container);
+    refreshFeedFromServer(container, { respectCooldown: true, hadCache: true });
     return;
   }
 
@@ -103,10 +114,14 @@ async function renderFeedPosts() {
 
 async function refreshFeedFromServer(container, options = {}) {
   if (_feedRefreshPromise) return _feedRefreshPromise;
+  if (options.respectCooldown && Date.now() - _feedLastRefreshAt < FEED_REFRESH_COOLDOWN) return;
 
   _feedRefreshPromise = (async () => {
     let posts;
-    try { posts = await fetchFeedPage(1); }
+    try {
+      posts = await fetchFeedPage(1);
+      _feedLastRefreshAt = Date.now();
+    }
     catch {
       if (!options.hadCache && !container.querySelector('.post[data-post-id]')) {
         container.innerHTML = '<p class="feed__empty">Нет соединения с сервером</p>';
@@ -134,7 +149,7 @@ async function refreshFeedFromServer(container, options = {}) {
     _feedRendered = true;
     _feedPage = 2;
     if (posts.length < FEED_PAGE) { _feedDone = true; return; }
-    const cachedPageCount = Math.max(1, Math.ceil(getFeedPostsCache().length / FEED_PAGE));
+    const cachedPageCount = Math.min(3, Math.max(1, Math.ceil(getFeedPostsCache().length / FEED_PAGE)));
     fillFeedGapsFromServer(container, 2, cachedPageCount);
     if (!container.querySelector('.feed-sentinel')) _attachFeedSentinel(container);
   })().finally(() => { _feedRefreshPromise = null; });
@@ -147,8 +162,8 @@ function _renderFeedPostsList(container, posts) {
   if (_feedObserver) { _feedObserver.disconnect(); _feedObserver = null; }
   container.innerHTML = '';
   container.dataset.lastDateKey = '';
-  const first = posts.slice(0, 6);
-  const rest = posts.slice(6);
+  const first = posts.slice(0, FEED_PAGE);
+  const rest = posts.slice(FEED_PAGE);
   first.forEach(p => registerServerPost(p));
   _appendPostsToFeed(container, first, false);
   appendFeedPostsInChunks(container, rest, token);
@@ -193,6 +208,7 @@ async function fillFeedGapsFromServer(container, startPage, maxPage) {
       syncFeedPostsIntoDom(container, merged);
       _feedPage = Math.max(_feedPage, page + 1);
       if (posts.length < FEED_PAGE) { _feedDone = true; break; }
+      await waitForIdle(1200);
     }
     if (!_feedDone && !container.querySelector('.feed-sentinel')) _attachFeedSentinel(container);
   })().finally(() => { _feedGapFillPromise = null; });
@@ -208,35 +224,35 @@ function handleDeletedPostsMissingFromDom(container) {
 }
 
 function syncFeedPostsIntoDom(container, posts) {
-  const missing = [];
+  if (!container || !Array.isArray(posts)) return;
 
   posts.forEach(post => {
     registerServerPost(post);
-    if (!findFeedPostEl(container, post.id)) missing.push(post);
   });
 
-  if (!missing.length) return;
+  const sentinel = container.querySelector('.feed-sentinel');
+  if (sentinel) sentinel.remove();
 
   container.querySelector('.feed__empty')?.remove();
   container.querySelectorAll('.post-skeleton').forEach(el => el.remove());
+  container.querySelectorAll('.date-separator').forEach(el => el.remove());
 
-  missing.forEach(post => {
-    const postEl = buildPostEl(post, null, null, false, '', 0, false);
-    postEl.classList.remove('post--enter');
+  const orderedIds = new Set(posts.map(post => Number(post.id)));
+  container.querySelectorAll('.post[data-post-id]').forEach(postEl => {
+    if (!orderedIds.has(Number(postEl.dataset.postId))) postEl.remove();
+  });
 
-    const postIndex = posts.findIndex(item => Number(item.id) === Number(post.id));
-    const nextPostEl = posts
-      .slice(postIndex + 1)
-      .map(item => findFeedPostEl(container, item.id))
-      .find(Boolean);
-    const sentinel = container.querySelector('.feed-sentinel');
-
-    if (nextPostEl) container.insertBefore(postEl, nextPostEl);
-    else if (sentinel) container.insertBefore(postEl, sentinel);
-    else container.appendChild(postEl);
+  posts.forEach((post, index) => {
+    let postEl = findFeedPostEl(container, post.id);
+    if (!postEl) {
+      postEl = buildPostEl(post, null, null, false, '', index, false);
+      postEl.classList.remove('post--enter');
+    }
+    container.appendChild(postEl);
   });
 
   normalizeFeedDateSeparators(container);
+  if (sentinel && !_feedDone) container.appendChild(sentinel);
   attachFeedMenu(container);
 }
 
@@ -297,7 +313,14 @@ function _attachFeedSentinel(container) {
       _feedPage = page + 1;
       if (posts.length < FEED_PAGE) { _feedDone = true; }
       else _attachFeedSentinel(container);
-    } catch {}
+    } catch (err) {
+      if (err.status === 429 || err.message === 'rate_limited') {
+        const delay = Math.max(5000, (typeof getApiRateLimitRemainingMs === 'function' ? getApiRateLimitRemainingMs() : 0) || 5000);
+        setTimeout(() => {
+          if (!_feedDone && container.isConnected && !container.querySelector('.feed-sentinel')) _attachFeedSentinel(container);
+        }, delay);
+      }
+    }
     _feedLoading = false;
   }, { rootMargin: '200px' });
   _feedObserver.observe(s);
@@ -343,7 +366,12 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
   if (!text && !images.length) return;
 
   const btn = document.getElementById('feed-btn-post');
-  setButtonBusy(btn, true, 'Публикация...');
+  const optimisticPost = buildOptimisticPost(text, images, replyToPostId);
+  clearComposeInput('feed-compose-input');
+  clearComposeImages('feed');
+  clearComposeReplyTarget('feed');
+  prependPostToFeed(optimisticPost);
+  startPostButtonCooldown(btn, 5);
 
   try {
     const res = await apiFetch(`${API}/posts`, {
@@ -355,12 +383,11 @@ document.getElementById('feed-btn-post').addEventListener('click', async () => {
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Ошибка сервера'); }
 
     const post = await res.json();
-    clearComposeInput('feed-compose-input');
-    clearComposeImages('feed');
-    clearComposeReplyTarget('feed');
+    handleDeletedPost(optimisticPost.id);
     prependPostToFeed(post);
   } catch (err) {
     if (err.message === 'unauthorized') return;
+    handleDeletedPost(optimisticPost.id);
     showPostError(err.message, btn);
   } finally {
     if (!btn.dataset.cooldownTimer) setButtonBusy(btn, false);

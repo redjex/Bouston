@@ -2,19 +2,45 @@
 
 /* ── Navigation ─────────────────────────────── */
 let _currentView = 'feed';
+let _routeSyncing = false;
 
-function showView(name) {
-  if (_currentView === name) return;
+function routeForView(name) {
+  if (name === 'profile') return '/profile';
+  if (name === 'search') return '/search';
+  if (name === 'settings') return '/settings';
+  if (name === 'user-profile') return window.location.pathname.startsWith('/u/') ? window.location.pathname + window.location.search : '/profile';
+  return '/feed';
+}
+
+function updateRouteForView(name, options = {}) {
+  if (_routeSyncing || options.skipRoute) return;
+  const url = options.url || routeForView(name);
+  if (window.location.pathname + window.location.search === url) return;
+  history.pushState({ view: name }, '', url);
+}
+
+function showView(name, options = {}) {
+  if (_currentView === name) {
+    updateRouteForView(name, options);
+    return;
+  }
   _currentView = name;
   document.getElementById('view-feed').classList.toggle('view--active', name === 'feed');
+  document.getElementById('view-search').classList.toggle('view--active', name === 'search');
   document.getElementById('view-profile').classList.toggle('view--active', name === 'profile');
   document.getElementById('view-settings').classList.toggle('view--active', name === 'settings');
   document.getElementById('view-user-profile').classList.toggle('view--active', name === 'user-profile');
   document.getElementById('nav-home').classList.toggle('active', name === 'feed');
+  document.getElementById('nav-search').classList.toggle('active', name === 'search');
   document.getElementById('nav-profile').classList.toggle('active', name === 'profile');
   if (name === 'feed') {
     renderFeedPosts();
     setScrollTopVisible(_feedEl.scrollTop > 300);
+    document.getElementById('feed-search-bar').classList.toggle('visible', _feedEl.scrollTop > 90);
+  } else if (name === 'search') {
+    const searchUrl = options.url ? new URL(options.url, window.location.origin) : null;
+    renderSearch(searchUrl ? (searchUrl.searchParams.get('q') || '') : getSearchRouteQuery(), { reset: true });
+    setScrollTopVisible(document.getElementById('search-wrap').scrollTop > 300);
   } else if (name === 'profile') {
     renderProfile();
     renderProfilePosts();
@@ -29,11 +55,20 @@ function showView(name) {
   }
   setProfileSettingsVisible(name === 'profile');
   if (name !== 'profile') setProfileStickyVisible(false);
+  updateRouteForView(name, options);
   requestAnimationFrame(updateNavIndicator);
 }
 
 document.getElementById('nav-home').addEventListener('click', () => showView('feed'));
+document.getElementById('nav-search').addEventListener('click', () => showView('search'));
 document.getElementById('nav-profile').addEventListener('click', () => showView('profile'));
+
+document.querySelectorAll('[data-file-target]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.fileTarget);
+    if (input) input.click();
+  });
+});
 
 /* ── Scroll to top ───────────────────────────── */
 const _scrollTopBtn = document.getElementById('btn-scroll-top');
@@ -57,7 +92,7 @@ function normalizeStaticLabels() {
   const profilePostBtn = document.getElementById('profile-btn-post');
   if (feedPostBtn) feedPostBtn.textContent = 'Выставить';
   if (profilePostBtn) profilePostBtn.textContent = 'Выставить';
-  document.querySelectorAll('label[for$="-photo-input"]').forEach(el => { el.title = 'Добавить фото'; });
+  document.querySelectorAll('[data-file-target$="-photo-input"]').forEach(el => { el.title = 'Добавить фото'; });
   document.querySelectorAll('.btn-emoji-open').forEach(el => { el.title = 'Добавить эмодзи'; });
   const settingsBtn = document.getElementById('btn-profile-settings');
   if (settingsBtn) settingsBtn.title = 'Настройки';
@@ -122,7 +157,7 @@ function updateProfileStickyCard() {
 function warmUpInterface() {
   const run = () => {
     loadEmojiList?.().catch?.(() => {});
-    ['/appimg/up.svg', '/appimg/settings.svg', '/appimg/comments.svg', '/appimg/default_avatar.png'].forEach(src => {
+    ['/appimg/up.svg', '/appimg/phone.svg', '/appimg/pc.svg', '/appimg/settings.svg', '/appimg/comments.svg', '/appimg/search.svg', '/appimg/default_avatar.png'].forEach(src => {
       const img = new Image();
       img.src = src;
     });
@@ -138,6 +173,14 @@ _feedEl.addEventListener('scroll', () => {
   if (_currentView === 'feed') {
     setScrollTopVisible(_feedEl.scrollTop > 300);
     document.getElementById('view-feed').classList.toggle('view--scrolled', _feedEl.scrollTop > 10);
+    document.getElementById('feed-search-bar').classList.toggle('visible', _feedEl.scrollTop > 90);
+  }
+});
+document.getElementById('search-wrap').addEventListener('scroll', () => {
+  if (_currentView === 'search') {
+    const searchWrap = document.getElementById('search-wrap');
+    setScrollTopVisible(searchWrap.scrollTop > 300);
+    document.getElementById('view-search').classList.toggle('view--scrolled', searchWrap.scrollTop > 10);
   }
 });
 _profileWrap.addEventListener('scroll', () => {
@@ -162,6 +205,7 @@ document.getElementById('user-profile-wrap').addEventListener('scroll', () => {
 });
 _scrollTopBtn.addEventListener('click', () => {
   if (_currentView === 'feed') _feedEl.scrollTo({ top: 0, behavior: 'smooth' });
+  else if (_currentView === 'search') document.getElementById('search-wrap').scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'profile') _profileWrap.scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'settings') document.getElementById('settings-wrap').scrollTo({ top: 0, behavior: 'smooth' });
   else if (_currentView === 'user-profile') document.getElementById('user-profile-wrap').scrollTo({ top: 0, behavior: 'smooth' });
@@ -209,31 +253,20 @@ async function initTgProfile() {
       p.avatarPreview = tgUser.avatar_preview_url || getAvatarPreviewSrc(tgUser.avatar_url);
     }
 
-    if (!isProfileCacheFresh(p)) {
-      try {
-        const uData = await fetchUserProfileCached(tgUser.username, { force: true });
-        if (uData) {
-        if (uData.banner_url) p.banner = uData.banner_url;
-        if (uData.avatar_url) p.avatar = uData.avatar_url;
-        if (uData.avatar_preview_url || uData.avatar_url) p.avatarPreview = uData.avatar_preview_url || getAvatarPreviewSrc(uData.avatar_url);
-        if (uData.bio) p.bio = uData.bio;
-        if (uData.display_name) p.name = uData.display_name;
-        if (uData.profile_username) p.username = uData.profile_username;
-        if (uData.verified) p.verified = uData.verified;
-        }
-      } catch {}
-    } else {
-      const uData = getCachedUserProfile(tgUser.username);
-      if (uData) {
-        if (uData.banner_url) p.banner = uData.banner_url;
-        if (uData.avatar_url) p.avatar = uData.avatar_url;
-        if (uData.avatar_preview_url || uData.avatar_url) p.avatarPreview = uData.avatar_preview_url || getAvatarPreviewSrc(uData.avatar_url);
-        if (uData.bio) p.bio = uData.bio;
-        if (uData.display_name) p.name = uData.display_name;
-        if (uData.profile_username) p.username = uData.profile_username;
-        if (uData.verified) p.verified = uData.verified;
-      }
-    }
+    const applyProfilePayload = uData => {
+      if (!uData) return false;
+      if (uData.banner_url) p.banner = uData.banner_url;
+      if (uData.banner_preview_url) p.bannerPreview = uData.banner_preview_url;
+      if (uData.avatar_url) p.avatar = uData.avatar_url;
+      if (uData.avatar_preview_url || uData.avatar_url) p.avatarPreview = uData.avatar_preview_url || getAvatarPreviewSrc(uData.avatar_url);
+      if (uData.bio) p.bio = uData.bio;
+      if (uData.display_name) p.name = uData.display_name;
+      if (uData.profile_username) p.username = uData.profile_username;
+      if (uData.verified) p.verified = uData.verified;
+      return true;
+    };
+
+    applyProfilePayload(getCachedUserProfile(tgUser.username));
 
     p.tgSynced   = true;
     p.tgUsername = tgUser.username || null;
@@ -247,6 +280,20 @@ async function initTgProfile() {
     });
     const profileAvatar = document.getElementById('profile-avatar');
     if (profileAvatar) profileAvatar.src = avatarSrc;
+
+    if (!isProfileCacheFresh(p)) {
+      fetchUserProfileCached(tgUser.username, { force: true })
+        .then(uData => {
+          const next = getProfile();
+          p = { ...next };
+          if (!applyProfilePayload(uData)) return;
+          saveProfile(p);
+          renderFeedComposeAvatar();
+          if (typeof renderProfile === 'function') renderProfile();
+          if (typeof refreshPostsVerifiedState === 'function') refreshPostsVerifiedState(p.verified);
+        })
+        .catch(() => {});
+    }
   } catch {}
 }
 
@@ -298,12 +345,45 @@ function connectEvents() {
   };
 }
 
+function getRouteState() {
+  const path = window.location.pathname;
+  const params = new URLSearchParams(window.location.search);
+  if (path === '/profile') return { view: 'profile' };
+  if (path === '/search') return { view: 'search', q: params.get('q') || '' };
+  if (path === '/settings') return { view: 'settings' };
+  if (path.startsWith('/u/')) return { view: 'user-profile', username: decodeURIComponent(path.slice('/u/'.length)) };
+  return { view: 'feed', comments: Number(params.get('comments')) || null };
+}
+
+async function applyRoute() {
+  const route = getRouteState();
+  _routeSyncing = true;
+  try {
+    if (route.view === 'user-profile') {
+      await openUserProfile(route.username, { skipRoute: true });
+    } else {
+      showView(route.view, { skipRoute: true });
+      if (route.view === 'feed') {
+        await renderFeedPosts();
+        if (route.comments && typeof openThreadFromRoute === 'function') openThreadFromRoute(route.comments);
+        else if (typeof closeThread === 'function' && _threadPostId !== null) closeThread({ skipRoute: true });
+      }
+    }
+  } finally {
+    _routeSyncing = false;
+  }
+}
+
+window.addEventListener('popstate', () => {
+  applyRoute();
+});
+
 normalizeStaticLabels();
 
 if (checkAuth()) {
   initTgProfile().finally(() => {
     renderFeedComposeAvatar();
-    renderFeedPosts();
+    applyRoute();
     connectEvents();
     warmUpInterface();
   });

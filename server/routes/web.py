@@ -14,7 +14,17 @@ EMOJI_DIR   = BASE_DIR / "img" / "emoji"
 
 @router.get("/")
 async def root():
-    return RedirectResponse(url="/app", status_code=302)
+    return FileResponse(str(WEB_DIR / "main" / "index.html"))
+
+
+@router.get("/index.html")
+async def index_page():
+    return RedirectResponse(url="/", status_code=302)
+
+
+@router.get("/rule")
+async def rule_page():
+    return FileResponse(str(WEB_DIR / "main" / "rule.html"))
 
 
 @router.get("/app")
@@ -22,6 +32,31 @@ async def app_page(bouston_token: str | None = Cookie(default=None)):
     if bouston_token:
         return FileResponse(str(WEB_DIR / "app" / "app.html"))
     return FileResponse(str(WEB_DIR / "app" / "index.html"))
+
+
+@router.get("/feed")
+async def feed_page(bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
+@router.get("/profile")
+async def profile_page(bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
+@router.get("/settings")
+async def settings_page(bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
+@router.get("/search")
+async def search_page(bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
+
+
+@router.get("/u/{username}")
+async def user_profile_page(username: str, bouston_token: str | None = Cookie(default=None)):
+    return await app_page(bouston_token)
 
 
 @router.get("/post/{post_id}", response_class=FileResponse)

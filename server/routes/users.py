@@ -19,8 +19,11 @@ from config import (
     USERNAME_RE,
 )
 from database import (
+    POSTS_QUERY,
+    build_post_response,
     avatar_urls, db_create_auth_session, db_get_user, db_list_auth_sessions, ensure_avatar_low,
-    db_revoke_auth_session, db_set_registered, db_upsert_user, save_avatar_image,
+    db_is_hardban_blocked, db_revoke_auth_session, db_set_registered, db_upsert_user,
+    fetch_post_extras, save_avatar_image,
 )
 from models import SendCodeRequest, UpdateCustomizationRequest, UpdateProfileRequest, UserInfoRequest, VerifyCodeRequest
 from sse import broadcast_event
@@ -33,6 +36,64 @@ DEFAULT_AVATAR_URL = "/appimg/default_avatar.png"
 DEFAULT_BANNER_URL = "/appimg/baner.png"
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+async def _viewer_from_request(request: Request | None) -> str:
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    if not auth_header.startswith("Bearer "):
+        return ""
+    try:
+        payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGO])
+        candidate = payload.get("sub", "")
+        session_id = payload.get("jti", "")
+        if candidate and session_id:
+            from database import db_touch_auth_session
+            if await db_touch_auth_session(session_id, candidate):
+                return candidate
+    except jwt.PyJWTError:
+        return ""
+    return ""
+
+
+async def _get_user_by_public_username(username: str):
+    u = normalize(username)
+    if not u:
+        return None
+    user = await db_get_user(u)
+    if user:
+        return user
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT * FROM users WHERE LOWER(profile_username) = ?",
+            (u,),
+        )
+        return await cursor.fetchone()
+
+
+def _public_asset_key(user, fallback: str) -> str:
+    return (user["profile_username"] if user and user["profile_username"] else fallback)
+
+
+def _banner_url(user, fallback: str, updated_at: int) -> str:
+    if not user or not user["banner_path"]:
+        return DEFAULT_BANNER_URL
+    source_path = Path(user["banner_path"])
+    if not source_path.exists():
+        return DEFAULT_BANNER_URL
+    banner_key = _public_asset_key(user, fallback)
+    target_path = BANNERS_DIR / f"{banner_key}.jpg"
+    if source_path != target_path:
+        try:
+            if not target_path.exists() or target_path.stat().st_mtime < source_path.stat().st_mtime:
+                target_path.write_bytes(source_path.read_bytes())
+        except Exception:
+            pass
+    return f"{SERVER_BASE}/img/banners/{banner_key}.jpg?t={updated_at}"
+
+
 def _customization_payload(user, username: str) -> dict:
     t = int(user["updated_at"] or 0)
     wallpaper_url = None
@@ -43,6 +104,23 @@ def _customization_payload(user, username: str) -> dict:
         "gradient_color_1": user["gradient_color_1"] if "gradient_color_1" in user.keys() and user["gradient_color_1"] else "#4E7ADF",
         "gradient_color_2": user["gradient_color_2"] if "gradient_color_2" in user.keys() and user["gradient_color_2"] else "#144CCC",
         "wallpaper_url": wallpaper_url,
+    }
+
+
+def _user_search_payload(user) -> dict:
+    t = int(user["updated_at"] or 0)
+    public_username = user["profile_username"] or user["username"]
+    avatar_url, avatar_preview_url = avatar_urls(public_username, user["avatar_path"], t)
+    avatar_url = avatar_url or DEFAULT_AVATAR_URL
+    avatar_preview_url = avatar_preview_url or avatar_url
+    return {
+        "username": user["username"],
+        "display_name": user["display_name"] or user["first_name"] or user["username"],
+        "profile_username": public_username,
+        "bio": user["bio"],
+        "verified": bool(user["verified"]),
+        "avatar_url": avatar_url,
+        "avatar_preview_url": avatar_preview_url,
     }
 
 
@@ -71,6 +149,8 @@ async def send_code(body: SendCodeRequest, request: Request):
 
     check_block(ip_blocks, ip)
     check_block(username_blocks, username)
+    if await db_is_hardban_blocked(ip, body.gpu_renderer, body.timezone):
+        raise HTTPException(403, "Device blocked")
 
     active_for_ip    = ip_active_username.get(ip)
     last             = last_send.get(username, 0)
@@ -85,6 +165,9 @@ async def send_code(body: SendCodeRequest, request: Request):
     user = await db_get_user(username)
     if not user:
         raise HTTPException(404, "Сначала напиши боту /start в Telegram")
+
+    if "banned" in user.keys() and bool(user["banned"]):
+        raise HTTPException(403, "Account banned")
 
     from aiogram.types import FSInputFile
     last_send[username]     = time.time()
@@ -121,6 +204,8 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
 
     check_block(ip_blocks, ip)
     check_block(username_blocks, username)
+    if await db_is_hardban_blocked(ip, body.gpu_renderer, body.timezone):
+        raise HTTPException(403, "Device blocked")
 
     entry = pending_codes.get(username)
     if not entry:
@@ -143,23 +228,26 @@ async def verify_code(body: VerifyCodeRequest, request: Request):
     last_send.pop(username, None)
     ip_active_username.pop(ip, None)
 
+    user = await db_get_user(username)
+    if user and "banned" in user.keys() and bool(user["banned"]):
+        raise HTTPException(403, "Account banned")
     session_id = await db_create_auth_session(
         username,
         request.headers.get("User-Agent", ""),
         get_ip(request),
+        body.gpu_renderer,
+        body.timezone,
     )
     token = jwt.encode(
         {"sub": username, "jti": session_id, "exp": int(time.time()) + JWT_TTL},
         JWT_SECRET,
         algorithm=JWT_ALGO,
     )
-
-    user = await db_get_user(username)
     t = int(user["updated_at"] or 0) if user else 0
-    avatar_url, avatar_preview_url = avatar_urls(username, user["avatar_path"], t) if user else (None, None)
+    avatar_url, avatar_preview_url = avatar_urls(user["profile_username"] or username, user["avatar_path"], t) if user else (None, None)
     avatar_url = avatar_url or DEFAULT_AVATAR_URL
     avatar_preview_url = avatar_preview_url or avatar_url
-    banner_url = f"{SERVER_BASE}/img/banners/{username}.jpg?t={t}" if (user and user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
+    banner_url = _banner_url(user, username, t)
 
     return {
         "ok": True,
@@ -214,18 +302,80 @@ async def revoke_auth_session(session_id: str, username: str = Depends(require_a
     return {"ok": True}
 
 
+@router.get("/api/search")
+async def search_app(q: str = "", page: int = 1, limit: int = 10, request: Request = None):
+    query = q.strip().lstrip("@")[:80]
+    if not query:
+        return {"users": [], "posts": [], "page": max(1, page), "hasMore": False}
+
+    page = max(1, page)
+    limit = max(1, min(limit, 20))
+    offset = (page - 1) * limit
+    lowered = query.lower()
+    like_any = f"%{_escape_like(lowered)}%"
+    like_prefix = f"{_escape_like(lowered)}%"
+    viewer = await _viewer_from_request(request)
+
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        users_cursor = await conn.execute(
+            """
+            SELECT *
+            FROM users
+            WHERE COALESCE(banned, 0) = 0
+              AND (
+                LOWER(COALESCE(profile_username, '')) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(display_name, first_name, '')) LIKE ? ESCAPE '\\'
+              )
+            ORDER BY
+              CASE
+                WHEN LOWER(COALESCE(profile_username, '')) = ? THEN 0
+                WHEN LOWER(COALESCE(display_name, first_name, '')) = ? THEN 1
+                WHEN LOWER(COALESCE(profile_username, '')) LIKE ? ESCAPE '\\' THEN 2
+                WHEN LOWER(COALESCE(display_name, first_name, '')) LIKE ? ESCAPE '\\' THEN 3
+                ELSE 4
+              END,
+              updated_at DESC
+            LIMIT 5
+            """,
+            (like_any, like_any, lowered, lowered, like_prefix, like_prefix),
+        )
+        user_rows = await users_cursor.fetchall()
+
+        posts_cursor = await conn.execute(
+            POSTS_QUERY + """
+            WHERE LOWER(p.text) LIKE ? ESCAPE '\\'
+            ORDER BY p.created_at DESC, p.id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (like_any, limit, offset),
+        )
+        post_rows = await posts_cursor.fetchall()
+        posts = []
+        for row in post_rows:
+            reactions, my_reactions, comment_count = await fetch_post_extras(conn, row["id"], viewer)
+            posts.append(build_post_response(row, viewer, reactions, my_reactions, comment_count))
+
+    return {
+        "users": [_user_search_payload(user) for user in user_rows],
+        "posts": posts,
+        "page": page,
+        "hasMore": len(posts) == limit,
+    }
+
+
 @router.get("/users/{username}")
 async def get_user_fast(username: str):
     u    = normalize(username)
-    user = await db_get_user(u)
+    user = await _get_user_by_public_username(u)
     if not user:
         raise HTTPException(404, "Пользователь не найден")
 
     t          = int(user["updated_at"] or 0)
-    avatar_url, avatar_preview_url = avatar_urls(u, user["avatar_path"], t)
+    avatar_url, avatar_preview_url = avatar_urls(user["profile_username"] or user["username"], user["avatar_path"], t)
     avatar_url = avatar_url or DEFAULT_AVATAR_URL
     avatar_preview_url = avatar_preview_url or avatar_url
-    banner_url = f"{SERVER_BASE}/img/banners/{u}.jpg?t={t}" if (user["banner_path"] and Path(user["banner_path"]).exists()) else DEFAULT_BANNER_URL
+    banner_url = _banner_url(user, user["username"], t)
 
     return {
         "username":         user["username"],
@@ -368,7 +518,7 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
     if body.profile_username is not None:
         u = body.profile_username.strip().lstrip("@").lower()
         if u and not USERNAME_RE.match(u):
-            raise HTTPException(400, "Юзернейм: от 3 до 20 символов, только буквы, цифры, _ и .")
+            raise HTTPException(400, "Юзернейм: от 3 до 20 символов, только буквы, цифры и _")
         body.profile_username = u or None
 
         if body.profile_username:
@@ -393,9 +543,11 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
             raise HTTPException(400, "Неверный формат аватарки")
         if len(img_bytes) > MAX_AVATAR_BYTES:
             raise HTTPException(400, "Аватарка слишком большая (макс 5 МБ)")
-        avatar_file = IMG_DIR / f"{tg_username}.jpg"
+        avatar_key = body.profile_username if body.profile_username is not None else user["profile_username"]
+        avatar_key = avatar_key or tg_username
+        avatar_file = IMG_DIR / f"{avatar_key}.jpg"
         save_avatar_image(img_bytes, avatar_file, size=640)
-        ensure_avatar_low(tg_username, avatar_file)
+        ensure_avatar_low(avatar_key, avatar_file)
         new_avatar_path = str(avatar_file)
 
     new_banner_path: str | None = None
@@ -409,7 +561,9 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
             raise HTTPException(400, "Неверный формат баннера")
         if len(img_bytes) > MAX_AVATAR_BYTES:
             raise HTTPException(400, "Баннер слишком большой (макс 5 МБ)")
-        banner_file = BANNERS_DIR / f"{tg_username}.jpg"
+        banner_key = body.profile_username if body.profile_username is not None else user["profile_username"]
+        banner_key = banner_key or tg_username
+        banner_file = BANNERS_DIR / f"{banner_key}.jpg"
         banner_file.write_bytes(img_bytes)
         new_banner_path = str(banner_file)
 
@@ -431,8 +585,10 @@ async def update_profile(body: UpdateProfileRequest, username: str = Depends(req
 
     if new_avatar_path:
         import asyncio
-        avatar_url, avatar_preview_url = avatar_urls(tg_username, new_avatar_path, now)
-        avatar_url = avatar_url or f"{SERVER_BASE}/img/{tg_username}.jpg?t={int(now)}"
+        avatar_key = body.profile_username if body.profile_username is not None else user["profile_username"]
+        avatar_key = avatar_key or tg_username
+        avatar_url, avatar_preview_url = avatar_urls(avatar_key, new_avatar_path, now)
+        avatar_url = avatar_url or f"{SERVER_BASE}/img/{avatar_key}.jpg?t={int(now)}"
         avatar_preview_url = avatar_preview_url or avatar_url
         asyncio.create_task(broadcast_event({
             "type":      "avatar_update",
